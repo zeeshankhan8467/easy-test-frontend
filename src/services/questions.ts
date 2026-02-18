@@ -30,6 +30,10 @@ export interface AIGenerateRequest {
   type?: 'mcq' | 'true_false' | 'multiple_select';
 }
 
+export interface QuestionImportParams {
+  file: File;
+}
+
 export const questionService = {
   getAll: async (): Promise<Question[]> => {
     const response = await api.get<any>('/questions/');
@@ -75,6 +79,17 @@ export const questionService = {
     } else if (response.data.results) {
       return { questions: response.data.results };
     }
+    return response.data;
+  },
+
+  import: async (data: QuestionImportParams): Promise<{ imported: number; errors: string[] }> => {
+    const formData = new FormData();
+    formData.append('file', data.file);
+    const response = await api.post<{ imported: number; errors: string[] }>(
+      '/questions/import/',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
     return response.data;
   },
 };

@@ -42,6 +42,21 @@ export interface PersonalAchievement {
   achievements: string[];
 }
 
+export interface AttendanceParticipant {
+  id: number;
+  name: string;
+  email: string;
+  present: boolean;
+}
+
+export interface ExamAttendance {
+  exam_id: number;
+  exam_title: string;
+  participants: AttendanceParticipant[];
+  present_count: number;
+  total_count: number;
+}
+
 export const reportService = {
   getExamReport: async (examId: string): Promise<ExamReport> => {
     const response = await api.get<ExamReport>(`/reports/exams/${examId}/`);
@@ -65,11 +80,23 @@ export const reportService = {
     return response.data;
   },
 
-  exportReport: async (examId: string, format: 'excel' | 'csv'): Promise<Blob> => {
-    const response = await api.get(`/reports/exams/${examId}/export/`, {
-      params: { format },
+  exportReport: async (examId: string, format: 'excel' | 'csv', layout?: 'individual' | 'questions'): Promise<Blob> => {
+    const params: { format: string; layout?: string } = { format };
+    if (layout) params.layout = layout;
+    const response = await api.get(`/report-export/${examId}/`, {
+      params,
       responseType: 'blob',
     });
+    if (response.status < 200 || response.status >= 300) {
+      const text = await (response.data as Blob).text();
+      const err = text ? (() => { try { return JSON.parse(text); } catch { return { detail: text }; } })() : { detail: 'Export failed' };
+      throw Object.assign(new Error(err.error || err.detail || 'Export failed'), { response, data: err });
+    }
+    return response.data as Blob;
+  },
+
+  getAttendance: async (examId: string): Promise<ExamAttendance> => {
+    const response = await api.get<ExamAttendance>(`/exams/${examId}/attendance/`);
     return response.data;
   },
 };
