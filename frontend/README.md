@@ -139,14 +139,22 @@ Dark mode can be toggled via the button in the sidebar. Preference is saved in l
 
 ## 🚀 Deployment
 
-1. Build the application:
+1. Set the production API URL (required for the build to call the right backend):
+   ```bash
+   # Windows (PowerShell)
+   $env:VITE_API_BASE_URL="https://api.yourdomain.com/api"
+   # Linux/macOS
+   export VITE_API_BASE_URL=https://api.yourdomain.com/api
+   ```
+
+2. Build the application:
    ```bash
    npm run build
    ```
 
-2. The `dist/` folder contains the production-ready files
+3. The `dist/` folder contains the production-ready files. Deploy it to your hosting (Vercel, Netlify, Railway, or your own server).
 
-3. Deploy to your preferred hosting service (Vercel, Netlify, etc.)
+For full backend + frontend + domain setup, see the root **[DEPLOYMENT.md](../DEPLOYMENT.md)** in the EasyTest repo.
 
 ## 📝 Notes
 

@@ -3,16 +3,30 @@ import api from './api';
 export interface Participant {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   clicker_id?: string;
   exam_id?: string;
+  extra?: Record<string, string>;
   created_at: string;
 }
 
 export interface ParticipantCreate {
   name: string;
-  email: string;
-  clicker_id?: string;
+  email?: string;
+  clicker_id: string;
+  [key: string]: string | undefined;
+}
+
+export interface ParticipantRow {
+  name: string;
+  clicker_id: string;
+  [key: string]: string | undefined;
+}
+
+/** User-defined custom field (e.g. email, rollno, class, gender). Stored in UI/localStorage. */
+export interface CustomFieldDef {
+  key: string;
+  label: string;
 }
 
 export interface ParticipantImport {
@@ -43,7 +57,19 @@ export const participantService = {
     return response.data;
   },
 
-  update: async (id: string, data: Partial<ParticipantCreate>): Promise<Participant> => {
+  /** Create multiple participants in one request. Name and clicker_id required per row; email optional. */
+  bulkCreate: async (
+    participants: ParticipantRow[]
+  ): Promise<{ created: number; participants: Participant[]; errors: string[] }> => {
+    const response = await api.post<{
+      created: number;
+      participants: Participant[];
+      errors: string[];
+    }>('/participants/bulk_create/', { participants });
+    return response.data;
+  },
+
+  update: async (id: string, data: Partial<Pick<Participant, 'name' | 'email' | 'clicker_id' | 'extra'>>): Promise<Participant> => {
     const response = await api.patch<Participant>(`/participants/${id}/`, data);
     return response.data;
   },

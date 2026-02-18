@@ -30,7 +30,7 @@ import { Label } from '@/components/ui/label';
 import { QuestionEditor } from '@/components/QuestionEditor';
 import { questionService, Question, QuestionCreate, AIGenerateRequest } from '@/services/questions';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Sparkles, Loader2, Trash2, Eye, Edit } from 'lucide-react';
+import { Plus, Sparkles, Loader2, Trash2, Eye, Edit, Upload } from 'lucide-react';
 
 export function Questions() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -41,6 +41,8 @@ export function Questions() {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewQuestion, setPreviewQuestion] = useState<Question | null>(null);
   const { toast } = useToast();
 
@@ -358,15 +360,32 @@ export function Questions() {
   const handleDelete = async (id: string) => {
     try {
       await questionService.delete(id);
-      toast({
-        title: 'Success',
-        description: 'Question deleted successfully',
-      });
+      toast({ title: 'Success', description: 'Question deleted successfully' });
+      loadQuestions();
+    } catch (error: any) {
+      toast({ title: 'Error', description: 'Failed to delete question', variant: 'destructive' });
+    }
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    try {
+      const result = await questionService.import({ file: selectedFile });
+      toast({ title: 'Success', description: `Imported ${result.imported} question(s)` });
+      if (result.errors.length > 0) {
+        toast({
+          title: 'Some rows had errors',
+          description: result.errors.slice(0, 3).join('; ') + (result.errors.length > 3 ? ` (+${result.errors.length - 3} more)` : ''),
+          variant: 'destructive',
+        });
+      }
+      setImportDialogOpen(false);
+      setSelectedFile(null);
       loadQuestions();
     } catch (error: any) {
       toast({
         title: 'Error',
-        description: 'Failed to delete question',
+        description: error.response?.data?.error || 'Failed to import questions',
         variant: 'destructive',
       });
     }
@@ -398,6 +417,37 @@ export function Questions() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Import CSV/Excel
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Import Questions</DialogTitle>
+                <DialogDescription>
+                  Upload a CSV or Excel file with columns: <strong>text</strong> (or question), <strong>options</strong> (pipe | or semicolon ; separated), <strong>correct_answer</strong> (0-based index, or comma-separated for multiple select). Optional: type, difficulty, marks, tags.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="qfile">File</Label>
+                  <Input
+                    id="qfile"
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setImportDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleImport} disabled={!selectedFile}>Import</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
