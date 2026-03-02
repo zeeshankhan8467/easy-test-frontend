@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { getOptionLabel } from '@/lib/optionDisplay';
 import { examService, ExamCreate, ExamQuestionInput } from '@/services/exams';
 import { questionService, Question } from '@/services/questions';
 import { useToast } from '@/components/ui/use-toast';
@@ -899,7 +900,7 @@ export function ExamForm() {
                           : ''
                       }`}
                     >
-                      {String.fromCharCode(65 + index)}. {option}
+                      {getOptionLabel(index, previewQuestion.option_display ?? 'alpha')}. {option}
                     </div>
                   ))}
                 </div>

@@ -31,6 +31,7 @@ import { QuestionEditor } from '@/components/QuestionEditor';
 import { questionService, Question, QuestionCreate, AIGenerateRequest } from '@/services/questions';
 import { useToast } from '@/components/ui/use-toast';
 import { Plus, Sparkles, Loader2, Trash2, Eye, Edit, Upload } from 'lucide-react';
+import { getOptionLabel } from '@/lib/optionDisplay';
 
 export function Questions() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -49,8 +50,9 @@ export function Questions() {
   const [newQuestion, setNewQuestion] = useState<QuestionCreate>({
     text: '',
     type: 'mcq',
-    options: ['', '', '', ''],
+    options: ['', '', '', '', '', '', '', '', '', ''],
     correct_answer: 0,
+    option_display: 'alpha',
     difficulty: 'medium',
     tags: [],
     marks: 1,
@@ -155,6 +157,7 @@ export function Questions() {
         type: question.type,
         options: question.options || [],
         correct_answer: question.correct_answer,
+        option_display: question.option_display ?? 'alpha',
         difficulty: question.difficulty,
         tags: question.tags || [],
         marks: question.marks || 1,
@@ -215,6 +218,7 @@ export function Questions() {
         ...newQuestion,
         options: filteredOptions,
         correct_answer: mappedCorrectAnswer,
+        option_display: newQuestion.option_display ?? 'alpha',
       };
 
       await questionService.update(editingQuestionId, questionToUpdate);
@@ -228,8 +232,9 @@ export function Questions() {
       setNewQuestion({
         text: '',
         type: 'mcq',
-        options: ['', '', '', ''],
+        options: ['', '', '', '', '', '', '', '', '', ''],
         correct_answer: 0,
+        option_display: 'alpha',
         difficulty: 'medium',
         tags: [],
         marks: 1,
@@ -286,6 +291,7 @@ export function Questions() {
         ...newQuestion,
         options: filteredOptions,
         correct_answer: mappedCorrectAnswer,
+        option_display: newQuestion.option_display ?? 'alpha',
       };
 
       await questionService.create(questionToCreate);
@@ -298,8 +304,9 @@ export function Questions() {
       setNewQuestion({
         text: '',
         type: 'mcq',
-        options: ['', '', '', ''],
+        options: ['', '', '', '', '', '', '', '', '', ''],
         correct_answer: 0,
+        option_display: 'alpha',
         difficulty: 'medium',
         tags: [],
         marks: 1,
@@ -428,7 +435,7 @@ export function Questions() {
               <DialogHeader>
                 <DialogTitle>Import Questions</DialogTitle>
                 <DialogDescription>
-                  Upload a CSV or Excel file with columns: <strong>text</strong> (or question), <strong>options</strong> (pipe | or semicolon ; separated), <strong>correct_answer</strong> (0-based index, or comma-separated for multiple select). Optional: type, difficulty, marks, tags.
+                  Upload a CSV or Excel file with columns: <strong>text</strong> (or question), <strong>options</strong> (pipe | or semicolon ; separated), <strong>correct_answer</strong> (0-based index, or comma-separated for multiple select). Optional: type, difficulty, marks, tags, <strong>option_display</strong> (alpha or numeric).
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -583,7 +590,7 @@ export function Questions() {
                     setNewQuestion({
                       text: '',
                       type: 'mcq',
-                      options: ['', '', '', ''],
+                      options: ['', '', '', '', '', '', '', '', '', ''],
                       correct_answer: 0,
                       difficulty: 'medium',
                       tags: [],
@@ -624,7 +631,7 @@ export function Questions() {
                     setNewQuestion({
                       text: '',
                       type: 'mcq',
-                      options: ['', '', '', ''],
+                      options: ['', '', '', '', '', '', '', '', '', ''],
                       correct_answer: 0,
                       difficulty: 'medium',
                       tags: [],
@@ -760,7 +767,7 @@ export function Questions() {
                 <ul className="mt-1 space-y-2">
                   {previewQuestion.options.map((option, index) => (
                     <li key={index} className="flex items-center gap-2">
-                      <span className="font-medium">{String.fromCharCode(65 + index)}.</span>
+                      <span className="font-medium">{getOptionLabel(index, previewQuestion.option_display ?? 'alpha')}.</span>
                       <span>{option}</span>
                       {Array.isArray(previewQuestion.correct_answer)
                         ? previewQuestion.correct_answer.includes(index) && (

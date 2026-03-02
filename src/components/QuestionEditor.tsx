@@ -13,6 +13,7 @@ import {
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { X, Plus, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getOptionLabel, type OptionDisplayFormat } from '@/lib/optionDisplay';
 
 interface QuestionEditorProps {
   question: {
@@ -20,6 +21,7 @@ interface QuestionEditorProps {
     type: 'mcq' | 'true_false' | 'multiple_select';
     options: string[];
     correct_answer: number | number[];
+    option_display?: OptionDisplayFormat;
     difficulty: 'easy' | 'medium' | 'hard';
     tags?: string[];
     marks?: number;
@@ -47,7 +49,7 @@ export function QuestionEditor({ question, onChange, errors }: QuestionEditorPro
     } else if (question.type === 'mcq' && question.options.length < 2) {
       onChange({
         ...question,
-        options: question.options.length === 0 ? ['', '', '', ''] : [...question.options, '', ''],
+        options: question.options.length === 0 ? ['', '', '', '', '', '', '', '', '', ''] : [...question.options, '', ''],
         correct_answer: typeof question.correct_answer === 'number' ? question.correct_answer : 0,
       });
     } else if (question.type === 'multiple_select' && question.options.length < 2) {
@@ -68,7 +70,7 @@ export function QuestionEditor({ question, onChange, errors }: QuestionEditorPro
       newOptions = ['True', 'False'];
       newCorrectAnswer = 0;
     } else if (newType === 'mcq') {
-      newOptions = question.options.length >= 2 ? question.options : ['', '', '', ''];
+      newOptions = question.options.length >= 2 ? question.options : ['', '', '', '', '', '', '', '', '', ''];
       newCorrectAnswer = typeof question.correct_answer === 'number' ? question.correct_answer : 0;
     } else if (newType === 'multiple_select') {
       newOptions = question.options.length >= 2 ? question.options : ['', ''];
@@ -220,6 +222,30 @@ export function QuestionEditor({ question, onChange, errors }: QuestionEditorPro
         </div>
       </div>
 
+      {/* Option label format: A,B,C or 1,2,3 (only for MCQ / multiple select) */}
+      {(question.type === 'mcq' || question.type === 'multiple_select') && (
+        <div className="space-y-2">
+          <Label>Option label format</Label>
+          <Select
+            value={question.option_display ?? 'alpha'}
+            onValueChange={(value: OptionDisplayFormat) =>
+              onChange({ ...question, option_display: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="alpha">A, B, C, D...</SelectItem>
+              <SelectItem value="numeric">1, 2, 3, 4...</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            How options are shown to participants (e.g. A - option1 or 1 - option1).
+          </p>
+        </div>
+      )}
+
       {/* Marks Field */}
       <div className="space-y-2">
         <Label htmlFor="marks">Marks/Points *</Label>
@@ -324,7 +350,7 @@ export function QuestionEditor({ question, onChange, errors }: QuestionEditorPro
                         ? index === 0
                           ? 'True'
                           : 'False'
-                        : `Option ${String.fromCharCode(65 + index)}`
+                        : `Option ${getOptionLabel(index, question.option_display ?? 'alpha')}`
                     }
                     className="pr-8"
                     required
@@ -355,7 +381,7 @@ export function QuestionEditor({ question, onChange, errors }: QuestionEditorPro
 
         {question.type === 'mcq' && question.options.length < 4 && (
           <p className="text-xs text-muted-foreground">
-            Minimum 2 options required. Recommended: 4 options for better quality.
+            Minimum 2 options required. You can add up to 10 or more options.
           </p>
         )}
       </div>
