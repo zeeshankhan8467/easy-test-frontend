@@ -86,7 +86,7 @@ export function Participants() {
     const name = createForm.name.trim();
     const clicker_id = createForm.clicker_id.trim();
     if (!name || !clicker_id) {
-      toast({ title: 'Validation', description: 'Name and Clicker ID are required.', variant: 'destructive' });
+      toast({ title: 'Validation', description: 'Name and Keypad ID are required.', variant: 'destructive' });
       return;
     }
     const rest: Record<string, string> = {};
@@ -184,7 +184,7 @@ export function Participants() {
     const name = (editForm.name ?? '').trim();
     const clicker_id = (editForm.clicker_id ?? '').trim();
     if (!name || !clicker_id) {
-      toast({ title: 'Validation', description: 'Name and Clicker ID are required.', variant: 'destructive' });
+      toast({ title: 'Validation', description: 'Name and Keypad ID are required.', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -247,7 +247,7 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Import Participants</DialogTitle>
                 <DialogDescription>
-                  Upload CSV or Excel with columns: <strong>Name</strong>, <strong>Clicker ID</strong> (required). Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID.
+                  Upload CSV or Excel with columns: <strong>Name</strong>, <strong>Keypad ID</strong> (or &quot;keypad id&quot;) (required). Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -287,7 +287,7 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Add Participant</DialogTitle>
                 <DialogDescription>
-                  Name and Clicker ID are required. All other fields are optional.
+                  Name and Keypad ID are required. All other fields are optional.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-4">
@@ -366,7 +366,7 @@ export function Participants() {
             <DialogContent className="max-w-2xl overflow-hidden">
               <DialogHeader>
                 <DialogTitle>Edit participant</DialogTitle>
-                <DialogDescription>Update name, clicker ID, and custom fields.</DialogDescription>
+                <DialogDescription>Update name, keypad ID, and custom fields.</DialogDescription>
               </DialogHeader>
               {editParticipant && (
                 <div className="space-y-4 py-4 overflow-hidden">

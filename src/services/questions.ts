@@ -6,6 +6,7 @@ export interface Question {
   type: 'mcq' | 'true_false' | 'multiple_select';
   options: string[];
   correct_answer: number | number[];
+  option_display?: 'alpha' | 'numeric';
   difficulty: 'easy' | 'medium' | 'hard';
   tags?: string[];
   marks?: number;
@@ -18,6 +19,7 @@ export interface QuestionCreate {
   type: 'mcq' | 'true_false' | 'multiple_select';
   options: string[];
   correct_answer: number | number[];
+  option_display?: 'alpha' | 'numeric';
   difficulty: 'easy' | 'medium' | 'hard';
   tags?: string[];
   marks?: number;
