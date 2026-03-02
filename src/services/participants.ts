@@ -1,5 +1,25 @@
 import api from './api';
 
+/** Fixed participant form fields. Name and Clicker ID required; rest optional. Matches backend import column mapping. */
+export const PARTICIPANT_FIELDS = [
+  { key: 'name', label: 'Name', required: true },
+  { key: 'clicker_id', label: 'Clicker ID', required: true },
+  { key: 'roll_no', label: 'Roll No.', required: false },
+  { key: 'admission_no', label: 'Admission No.', required: false },
+  { key: 'class', label: 'Class', required: false },
+  { key: 'subject', label: 'Subject', required: false },
+  { key: 'section', label: 'Section', required: false },
+  { key: 'team', label: 'Team', required: false },
+  { key: 'group', label: 'Group', required: false },
+  { key: 'house', label: 'House', required: false },
+  { key: 'gender', label: 'Gender', required: false },
+  { key: 'city', label: 'City', required: false },
+  { key: 'uid', label: 'UID', required: false },
+  { key: 'employee_code', label: 'Employee Code', required: false },
+  { key: 'teacher_name', label: 'Teacher Name', required: false },
+  { key: 'email_id', label: 'Email ID', required: false },
+] as const;
+
 export interface Participant {
   id: string;
   name: string;

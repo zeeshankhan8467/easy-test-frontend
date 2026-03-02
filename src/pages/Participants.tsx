@@ -20,30 +20,15 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { participantService, Participant, ParticipantRow, CustomFieldDef } from '@/services/participants';
+import { participantService, Participant, ParticipantRow, PARTICIPANT_FIELDS } from '@/services/participants';
 import { useToast } from '@/components/ui/use-toast';
-import { Upload, Plus, Loader2, Trash2, Edit, Settings2, Eye } from 'lucide-react';
+import { Upload, Plus, Loader2, Trash2, Edit, Eye } from 'lucide-react';
 
-const CUSTOM_FIELDS_STORAGE_KEY = 'easytest_participant_custom_fields';
-
-function loadCustomFields(): CustomFieldDef[] {
-  try {
-    const s = localStorage.getItem(CUSTOM_FIELDS_STORAGE_KEY);
-    if (s) {
-      const parsed = JSON.parse(s);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-  } catch (_) {}
-  return [];
-}
-
-function saveCustomFields(fields: CustomFieldDef[]) {
-  localStorage.setItem(CUSTOM_FIELDS_STORAGE_KEY, JSON.stringify(fields));
-}
-
-function buildEmptyRow(customFields: CustomFieldDef[]): ParticipantRow {
+function buildEmptyRow(): ParticipantRow {
   const row: ParticipantRow = { name: '', clicker_id: '' };
-  customFields.forEach((f) => (row[f.key] = ''));
+  PARTICIPANT_FIELDS.forEach((f) => {
+    if (f.key !== 'name' && f.key !== 'clicker_id') (row[f.key] = '');
+  });
   return row;
 }
 
@@ -52,9 +37,6 @@ export function Participants() {
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [fieldsDialogOpen, setFieldsDialogOpen] = useState(false);
-  const [newFieldKey, setNewFieldKey] = useState('');
-  const [newFieldLabel, setNewFieldLabel] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -65,10 +47,7 @@ export function Participants() {
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
-  const [customFields, setCustomFields] = useState<CustomFieldDef[]>(() => loadCustomFields());
-  const [rows, setRows] = useState<ParticipantRow[]>(() => [buildEmptyRow(loadCustomFields())]);
-
-  const emptyRow = buildEmptyRow(customFields);
+  const [createForm, setCreateForm] = useState<ParticipantRow>(() => buildEmptyRow());
 
   useEffect(() => {
     loadParticipants();
@@ -99,72 +78,45 @@ export function Participants() {
     }
   };
 
-  const addRow = () => setRows((r) => [...r, { ...emptyRow }]);
-  const removeRow = (index: number) => {
-    if (rows.length <= 1) return;
-    setRows((r) => r.filter((_, i) => i !== index));
-  };
-  const updateRow = (index: number, field: string, value: string) => {
-    setRows((r) => r.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+  const updateCreateForm = (field: string, value: string) => {
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const addCustomField = (key: string, label: string) => {
-    const k = key.trim().toLowerCase().replace(/\s+/g, '_');
-    if (!k) return;
-    if (customFields.some((f) => f.key === k)) {
-      toast({ title: 'Field exists', description: `"${k}" is already added.`, variant: 'destructive' });
+  const handleCreate = async () => {
+    const name = createForm.name.trim();
+    const clicker_id = createForm.clicker_id.trim();
+    if (!name || !clicker_id) {
+      toast({ title: 'Validation', description: 'Name and Clicker ID are required.', variant: 'destructive' });
       return;
     }
-    const next = [...customFields, { key: k, label: label.trim() || k }];
-    setCustomFields(next);
-    saveCustomFields(next);
-    setRows((prev) => prev.map((row) => ({ ...row, [k]: '' })));
-    toast({ title: 'Field added', description: `"${label || k}" added.` });
-  };
-  const removeCustomField = (key: string) => {
-    const next = customFields.filter((f) => f.key !== key);
-    setCustomFields(next);
-    saveCustomFields(next);
-    setRows((prev) => prev.map(({ [key]: _, ...rest }) => rest as ParticipantRow));
-  };
-
-  const handleBulkCreate = async () => {
-    const toCreate = rows
-      .map((r) => {
-        const name = r.name.trim();
-        const clicker_id = r.clicker_id.trim();
-        if (!name || !clicker_id) return null;
-        const rest: Record<string, string> = {};
-        customFields.forEach((f) => {
-          const v = (r[f.key] ?? '').trim();
-          if (v) rest[f.key] = v;
-        });
-        return { name, clicker_id, ...rest };
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null);
-    if (toCreate.length === 0) {
-      toast({ title: 'Validation', description: 'Each row needs Name and Clicker ID.', variant: 'destructive' });
-      return;
-    }
+    const rest: Record<string, string> = {};
+    PARTICIPANT_FIELDS.forEach((f) => {
+      if (f.key !== 'name' && f.key !== 'clicker_id') {
+        const v = (createForm[f.key] ?? '').trim();
+        if (v) rest[f.key] = v;
+      }
+    });
+    const emailVal = rest.email_id;
+    if (emailVal) delete rest.email_id;
+    const payload: Record<string, string> = { name, clicker_id, ...rest };
+    if (emailVal) payload.email = emailVal;
     setCreating(true);
     try {
-      const result = await participantService.bulkCreate(toCreate);
+      const result = await participantService.bulkCreate([payload]);
       toast({
         title: 'Success',
-        description: result.errors.length
-          ? `Created ${result.created} participant(s). ${result.errors.length} error(s).`
-          : `Created ${result.created} participant(s).`,
+        description: result.errors.length ? `Created with warnings.` : `Participant created.`,
       });
       if (result.errors.length > 0) {
         toast({ title: 'Errors', description: result.errors.join(' '), variant: 'destructive' });
       }
       setCreateDialogOpen(false);
-      setRows([buildEmptyRow(customFields)]);
+      setCreateForm(buildEmptyRow());
       loadParticipants();
     } catch (error: any) {
       const data = error.response?.data;
-      const msg = data?.participants?.[0] || data?.clicker_id?.[0] || data?.detail || 'Failed to create participants';
-      toast({ title: 'Error', description: typeof msg === 'string' ? msg : 'Failed to create participants', variant: 'destructive' });
+      const msg = data?.participants?.[0] || data?.clicker_id?.[0] || data?.detail || 'Failed to create participant';
+      toast({ title: 'Error', description: typeof msg === 'string' ? msg : 'Failed to create participant', variant: 'destructive' });
     } finally {
       setCreating(false);
     }
@@ -216,13 +168,13 @@ export function Participants() {
 
   const openEdit = (p: Participant) => {
     setEditParticipant(p);
-    const form: Record<string, string> = {
-      name: p.name ?? '',
-      clicker_id: p.clicker_id ?? '',
-      email: p.email ?? '',
-    };
-    const extraKeys = new Set<string>([...Object.keys(p.extra ?? {}), ...customFields.map((f) => f.key)]);
-    extraKeys.forEach((key) => (form[key] = p.extra?.[key] ?? (key === 'email' ? p.email ?? '' : '')));
+    const form: Record<string, string> = {};
+    PARTICIPANT_FIELDS.forEach((f) => {
+      if (f.key === 'name') form.name = p.name ?? '';
+      else if (f.key === 'clicker_id') form.clicker_id = p.clicker_id ?? '';
+      else if (f.key === 'email_id') form.email_id = p.extra?.email_id ?? p.email ?? '';
+      else form[f.key] = p.extra?.[f.key] ?? '';
+    });
     setEditForm(form);
     setEditDialogOpen(true);
   };
@@ -238,14 +190,17 @@ export function Participants() {
     setSaving(true);
     try {
       const extra: Record<string, string> = {};
-      customFields.forEach((f) => {
-        const v = (editForm[f.key] ?? '').trim();
-        if (v) extra[f.key] = v;
+      PARTICIPANT_FIELDS.forEach((f) => {
+        if (f.key !== 'name' && f.key !== 'clicker_id') {
+          const v = (editForm[f.key] ?? '').trim();
+          if (v) extra[f.key] = v;
+        }
       });
+      const emailVal = (editForm.email_id ?? '').trim() || undefined;
       await participantService.update(editParticipant.id, {
         name,
         clicker_id,
-        email: (editForm.email ?? '').trim() || undefined,
+        email: emailVal,
         extra: Object.keys(extra).length ? extra : undefined,
       });
       toast({ title: 'Success', description: 'Participant updated successfully' });
@@ -281,47 +236,6 @@ export function Participants() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setFieldsDialogOpen(true)}>
-            <Settings2 className="h-4 w-4 mr-2" />
-            Manage fields
-          </Button>
-          <Dialog open={fieldsDialogOpen} onOpenChange={setFieldsDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Participant custom fields</DialogTitle>
-                <DialogDescription>
-                  Add fields like email, rollno, class, gender. They appear when adding participants and in the table. Name and Clicker ID are always required.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="flex flex-wrap gap-2">
-                  {customFields.map((f) => (
-                    <div key={f.key} className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-sm">
-                      <span className="font-medium">{f.label || f.key}</span>
-                      <span className="text-muted-foreground">({f.key})</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeCustomField(f.key)} title="Remove field">
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2 items-end">
-                  <div className="space-y-1">
-                    <Label htmlFor="newKey">Field key (e.g. email, rollno, class)</Label>
-                    <Input id="newKey" placeholder="e.g. rollno" value={newFieldKey} onChange={(e) => setNewFieldKey(e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="newLabel">Label (optional)</Label>
-                    <Input id="newLabel" placeholder="e.g. Roll No" value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} />
-                  </div>
-                  <Button type="button" onClick={() => { addCustomField(newFieldKey, newFieldLabel); setNewFieldKey(''); setNewFieldLabel(''); }}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add field
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
           <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -333,7 +247,7 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Import Participants</DialogTitle>
                 <DialogDescription>
-                  Upload CSV or Excel with at least &quot;name&quot; and &quot;clicker_id&quot;. Any other columns (email, rollno, class, gender, etc.) are imported as custom fields.
+                  Upload CSV or Excel with columns: <strong>Name</strong>, <strong>Clicker ID</strong> (required). Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -362,60 +276,43 @@ export function Participants() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (open) setRows([buildEmptyRow(customFields)]); }}>
+          <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (open) setCreateForm(buildEmptyRow()); }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Participants
+                Add Participant
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-3xl overflow-hidden">
               <DialogHeader>
-                <DialogTitle>Add Participants</DialogTitle>
+                <DialogTitle>Add Participant</DialogTitle>
                 <DialogDescription>
-                  Name and Clicker ID are required. Other columns depend on your custom fields (use &quot;Manage fields&quot; to add email, rollno, class, gender, etc.).
+                  Name and Clicker ID are required. All other fields are optional.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="flex flex-col gap-3 overflow-x-auto">
-                  <div className="grid gap-2 items-center text-sm font-medium text-muted-foreground" style={{ gridTemplateColumns: `minmax(100px,1fr) minmax(80px,1fr) ${customFields.map(() => 'minmax(80px,1fr)').join(' ')} 32px` }}>
-                    <span>Name *</span>
-                    <span>Clicker ID *</span>
-                    {customFields.map((f) => (
-                      <span key={f.key}>{f.label || f.key}</span>
-                    ))}
-                    <span />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-4">
+                {PARTICIPANT_FIELDS.map((f) => (
+                  <div key={f.key} className="space-y-2">
+                    <Label htmlFor={`create-${f.key}`}>
+                      {f.label} {f.required ? '*' : ''}
+                    </Label>
+                    <Input
+                      id={`create-${f.key}`}
+                      placeholder={f.required ? '' : `Optional`}
+                      value={createForm[f.key] ?? ''}
+                      onChange={(e) => updateCreateForm(f.key, e.target.value)}
+                      type={f.key === 'email_id' ? 'email' : 'text'}
+                    />
                   </div>
-                  {rows.map((row, index) => (
-                    <div key={index} className="grid gap-2 items-center" style={{ gridTemplateColumns: `minmax(100px,1fr) minmax(80px,1fr) ${customFields.map(() => 'minmax(80px,1fr)').join(' ')} 32px` }}>
-                      <Input placeholder="Name" value={row.name} onChange={(e) => updateRow(index, 'name', e.target.value)} />
-                      <Input placeholder="Clicker ID" value={row.clicker_id} onChange={(e) => updateRow(index, 'clicker_id', e.target.value)} />
-                      {customFields.map((f) => (
-                        <Input
-                          key={f.key}
-                          placeholder={f.label || f.key}
-                          value={row[f.key] ?? ''}
-                          onChange={(e) => updateRow(index, f.key, e.target.value)}
-                        />
-                      ))}
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(index)} disabled={rows.length <= 1} title="Remove row">
-                        <Trash2 className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={addRow}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add another row
-                </Button>
+                ))}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleBulkCreate} disabled={creating}>
+                <Button onClick={handleCreate} disabled={creating}>
                   {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Create all
+                  Create
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -429,38 +326,20 @@ export function Participants() {
                 <DialogDescription>View participant information</DialogDescription>
               </DialogHeader>
               {viewParticipant && (
-                <div className="space-y-4 py-4">
+                <div className="space-y-4 py-4 overflow-hidden">
                   <div className="grid gap-2 text-sm">
-                    <div className="flex justify-between gap-4 border-b pb-2">
-                      <span className="text-muted-foreground">Name</span>
-                      <span className="font-medium">{viewParticipant.name}</span>
-                    </div>
-                    <div className="flex justify-between gap-4 border-b pb-2">
-                      <span className="text-muted-foreground">Clicker ID</span>
-                      <span className="font-medium">{viewParticipant.clicker_id ?? '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-4 border-b pb-2">
-                      <span className="text-muted-foreground">Email</span>
-                      <span className="font-medium">{viewParticipant.email ?? '—'}</span>
-                    </div>
-                    {customFields.map((f) => {
-                      const val = viewParticipant.extra?.[f.key] ?? (f.key === 'email' ? viewParticipant.email : undefined);
+                    {PARTICIPANT_FIELDS.map((f) => {
+                      const val = f.key === 'name' ? viewParticipant.name
+                        : f.key === 'clicker_id' ? viewParticipant.clicker_id
+                        : f.key === 'email_id' ? (viewParticipant.extra?.email_id ?? viewParticipant.email)
+                        : viewParticipant.extra?.[f.key];
                       return (
                         <div key={f.key} className="flex justify-between gap-4 border-b pb-2">
-                          <span className="text-muted-foreground">{f.label || f.key}</span>
+                          <span className="text-muted-foreground">{f.label}</span>
                           <span className="font-medium">{val ?? '—'}</span>
                         </div>
                       );
                     })}
-                    {Object.entries(viewParticipant.extra ?? {}).map(
-                      ([key]) =>
-                        !customFields.some((f) => f.key === key) && (
-                          <div key={key} className="flex justify-between gap-4 border-b pb-2">
-                            <span className="text-muted-foreground">{key}</span>
-                            <span className="font-medium">{viewParticipant.extra![key] ?? '—'}</span>
-                          </div>
-                        )
-                    )}
                     <div className="flex justify-between gap-4 border-b pb-2">
                       <span className="text-muted-foreground">Created</span>
                       <span className="font-medium">{new Date(viewParticipant.created_at).toLocaleString()}</span>
@@ -484,48 +363,26 @@ export function Participants() {
 
           {/* Edit participant dialog */}
           <Dialog open={editDialogOpen} onOpenChange={(open) => { setEditDialogOpen(open); if (!open) setEditParticipant(null); }}>
-            <DialogContent>
+            <DialogContent className="max-w-2xl overflow-hidden">
               <DialogHeader>
                 <DialogTitle>Edit participant</DialogTitle>
                 <DialogDescription>Update name, clicker ID, and custom fields.</DialogDescription>
               </DialogHeader>
               {editParticipant && (
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-name">Name *</Label>
-                    <Input
-                      id="edit-name"
-                      value={editForm.name ?? ''}
-                      onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                    />
+                <div className="space-y-4 py-4 overflow-hidden">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {PARTICIPANT_FIELDS.map((f) => (
+                      <div key={f.key} className="space-y-2">
+                        <Label htmlFor={`edit-${f.key}`}>{f.label} {f.required ? '*' : ''}</Label>
+                        <Input
+                          id={`edit-${f.key}`}
+                          type={f.key === 'email_id' ? 'email' : 'text'}
+                          value={editForm[f.key] ?? ''}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-clicker_id">Clicker ID *</Label>
-                    <Input
-                      id="edit-clicker_id"
-                      value={editForm.clicker_id ?? ''}
-                      onChange={(e) => setEditForm((f) => ({ ...f, clicker_id: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-email">Email (optional)</Label>
-                    <Input
-                      id="edit-email"
-                      type="email"
-                      value={editForm.email ?? ''}
-                      onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-                    />
-                  </div>
-                  {customFields.map((f) => (
-                    <div key={f.key} className="space-y-2">
-                      <Label htmlFor={`edit-${f.key}`}>{f.label || f.key}</Label>
-                      <Input
-                        id={`edit-${f.key}`}
-                        value={editForm[f.key] ?? ''}
-                        onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                      />
-                    </div>
-                  ))}
                 </div>
               )}
               <DialogFooter>
@@ -559,15 +416,13 @@ export function Participants() {
               </Button>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Clicker ID</TableHead>
-                  {customFields.map((f) => (
-                    <TableHead key={f.key}>{f.label || f.key}</TableHead>
+                  {PARTICIPANT_FIELDS.map((f) => (
+                    <TableHead key={f.key}>{f.label}</TableHead>
                   ))}
-                  {customFields.length === 0 && <TableHead>Email</TableHead>}
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -575,13 +430,17 @@ export function Participants() {
               <TableBody>
                 {safeParticipants.map((participant) => (
                   <TableRow key={participant.id}>
-                    <TableCell className="font-medium">{participant.name}</TableCell>
-                    <TableCell>{participant.clicker_id || <span className="text-muted-foreground">—</span>}</TableCell>
-                    {customFields.map((f) => {
-                      const val = participant.extra?.[f.key] ?? (f.key === 'email' ? participant.email : undefined);
-                      return <TableCell key={f.key}>{val ?? <span className="text-muted-foreground">—</span>}</TableCell>;
+                    {PARTICIPANT_FIELDS.map((f) => {
+                      const val = f.key === 'name' ? participant.name
+                        : f.key === 'clicker_id' ? participant.clicker_id
+                        : f.key === 'email_id' ? (participant.extra?.email_id ?? participant.email)
+                        : participant.extra?.[f.key];
+                      return (
+                        <TableCell key={f.key} className={f.key === 'name' ? 'font-medium' : ''}>
+                          {val ?? <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                      );
                     })}
-                    {customFields.length === 0 && <TableCell>{participant.email ?? <span className="text-muted-foreground">—</span>}</TableCell>}
                     <TableCell>{new Date(participant.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -600,6 +459,7 @@ export function Participants() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
