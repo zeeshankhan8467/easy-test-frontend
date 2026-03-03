@@ -30,6 +30,8 @@ export interface AIGenerateRequest {
   count: number;
   difficulty?: 'easy' | 'medium' | 'hard';
   type?: 'mcq' | 'true_false' | 'multiple_select';
+  /** For MCQ: number of options per question (2-15). Optional; can also be specified in topic e.g. "with 10 options". */
+  num_options?: number;
 }
 
 export interface QuestionImportParams {

@@ -112,21 +112,21 @@ export function Reports() {
     }
   };
 
-  const handleExport = async (format: 'excel' | 'csv', layout?: 'individual' | 'questions') => {
+  const handleExport = async (format: 'excel' | 'csv', layout?: 'individual' | 'questions' | 'personal_achievement') => {
     if (!selectedExamId) return;
     try {
       const blob = await reportService.exportReport(selectedExamId, format, layout);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       const ext = format === 'excel' ? 'xlsx' : 'csv';
-      const suffix = layout === 'individual' ? '-individual' : layout === 'questions' ? '-questions' : '';
+      const suffix = layout === 'individual' ? '-individual' : layout === 'questions' ? '-questions' : layout === 'personal_achievement' ? '-personal-achievement' : '';
       a.download = `report-${selectedExamId}${suffix}.${ext}`;
       a.href = url;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      const desc = layout === 'individual' ? 'Individual report exported' : layout === 'questions' ? 'By Questions report exported' : `Report exported as ${format.toUpperCase()}`;
+      const desc = layout === 'individual' ? 'Individual report exported' : layout === 'questions' ? 'By Questions report exported' : layout === 'personal_achievement' ? 'Personal Achievement and Detail report exported' : `Report exported as ${format.toUpperCase()}`;
       toast({ title: 'Success', description: desc });
     } catch (error: any) {
       const msg = error?.data?.error ?? error?.data?.detail ?? error?.message ?? 'Failed to export report';
@@ -196,6 +196,10 @@ export function Reports() {
               <Button variant="outline" size="sm" onClick={() => handleExport('excel', 'questions')}>
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Excel (by questions)
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleExport('excel', 'personal_achievement')}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel (Personal Achievement & Detail)
               </Button>
             </div>
           </div>
