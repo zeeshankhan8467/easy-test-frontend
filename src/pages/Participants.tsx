@@ -215,6 +215,14 @@ export function Participants() {
     }
   };
 
+  // Table column order: Keypad ID first, then Name, then rest of PARTICIPANT_FIELDS
+  const tableColumnOrder = [
+    'clicker_id',
+    'name',
+    ...PARTICIPANT_FIELDS.map((f) => f.key).filter((k) => k !== 'clicker_id' && k !== 'name'),
+  ];
+  const getFieldByKey = (key: string) => PARTICIPANT_FIELDS.find((f) => f.key === key)!;
+
   // Ensure participants is always an array
   const safeParticipants = Array.isArray(participants) ? participants : [];
 
@@ -420,8 +428,8 @@ export function Participants() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {PARTICIPANT_FIELDS.map((f) => (
-                    <TableHead key={f.key}>{f.label}</TableHead>
+                  {tableColumnOrder.map((key) => (
+                    <TableHead key={key}>{getFieldByKey(key).label}</TableHead>
                   ))}
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -430,13 +438,13 @@ export function Participants() {
               <TableBody>
                 {safeParticipants.map((participant) => (
                   <TableRow key={participant.id}>
-                    {PARTICIPANT_FIELDS.map((f) => {
-                      const val = f.key === 'name' ? participant.name
-                        : f.key === 'clicker_id' ? participant.clicker_id
-                        : f.key === 'email_id' ? (participant.extra?.email_id ?? participant.email)
-                        : participant.extra?.[f.key];
+                    {tableColumnOrder.map((key) => {
+                      const val = key === 'name' ? participant.name
+                        : key === 'clicker_id' ? participant.clicker_id
+                        : key === 'email_id' ? (participant.extra?.email_id ?? participant.email)
+                        : participant.extra?.[key];
                       return (
-                        <TableCell key={f.key} className={f.key === 'name' ? 'font-medium' : ''}>
+                        <TableCell key={key} className={key === 'clicker_id' ? 'font-medium' : key === 'name' ? 'font-medium' : ''}>
                           {val ?? <span className="text-muted-foreground">—</span>}
                         </TableCell>
                       );

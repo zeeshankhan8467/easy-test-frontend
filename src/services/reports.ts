@@ -80,7 +80,7 @@ export const reportService = {
     return response.data;
   },
 
-  exportReport: async (examId: string, format: 'excel' | 'csv', layout?: 'individual' | 'questions'): Promise<Blob> => {
+  exportReport: async (examId: string, format: 'excel' | 'csv', layout?: 'individual' | 'questions' | 'personal_achievement'): Promise<Blob> => {
     const params: { format: string; layout?: string } = { format };
     if (layout) params.layout = layout;
     const response = await api.get(`/report-export/${examId}/`, {

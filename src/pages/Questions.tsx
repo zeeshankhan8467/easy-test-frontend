@@ -478,7 +478,7 @@ export function Questions() {
                     onChange={(e) =>
                       setAiRequest({ ...aiRequest, topic: e.target.value })
                     }
-                    placeholder="e.g., Python Programming, World History"
+                    placeholder="e.g., Class 6 Math, Python Programming. You can add 'with 10 options' for MCQ."
                   />
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
@@ -535,6 +535,26 @@ export function Questions() {
                     </Select>
                   </div>
                 </div>
+                {aiRequest.type === 'mcq' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="num_options">Options per question (optional)</Label>
+                    <Input
+                      id="num_options"
+                      type="number"
+                      min="2"
+                      max="15"
+                      placeholder="Default 4 (or add 'with 10 options' in topic)"
+                      value={aiRequest.num_options ?? ''}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setAiRequest({
+                          ...aiRequest,
+                          num_options: v === '' ? undefined : Math.min(15, Math.max(2, parseInt(v, 10) || 4)),
+                        });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button 
