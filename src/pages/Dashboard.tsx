@@ -117,7 +117,7 @@ export function Dashboard() {
 
       {/* Charts */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+        {/* <Card>
           <CardHeader>
             <CardTitle>Performance Trend</CardTitle>
             <CardDescription>Average scores over time</CardDescription>
@@ -140,7 +140,7 @@ export function Dashboard() {
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
-        </Card>
+        </Card> */}
 
         <Card>
           <CardHeader>

@@ -32,6 +32,8 @@ export interface AIGenerateRequest {
   type?: 'mcq' | 'true_false' | 'multiple_select';
   /** For MCQ: number of options per question (2-15). Optional; can also be specified in topic e.g. "with 10 options". */
   num_options?: number;
+  /** Option label format: alpha (A,B,C) or numeric (1,2,3). Default alpha. */
+  option_display?: 'alpha' | 'numeric';
 }
 
 export interface QuestionImportParams {
@@ -74,7 +76,15 @@ export const questionService = {
   },
 
   generateAI: async (data: AIGenerateRequest): Promise<any> => {
-    const response = await api.post<any>('/questions/generate/', data);
+    const payload = {
+      topic: data.topic,
+      count: data.count,
+      difficulty: data.difficulty ?? 'medium',
+      type: data.type ?? 'mcq',
+      ...(data.num_options != null && { num_options: data.num_options }),
+      option_display: data.option_display ?? 'alpha',
+    };
+    const response = await api.post<any>('/questions/generate/', payload);
     // Handle both direct array response and wrapped response
     if (response.data.questions) {
       return response.data;

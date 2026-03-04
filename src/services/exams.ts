@@ -15,7 +15,7 @@ export interface Exam {
   id: string;
   title: string;
   description?: string;
-  duration: number; // in minutes
+  duration: number; // seconds per question (for session timer)
   revisable: boolean;
   status: 'draft' | 'frozen' | 'completed';
   positive_marking: number; // Legacy - kept for backward compatibility

@@ -181,7 +181,7 @@ export function ExamList() {
                 {safeExams.map((exam) => (
                   <TableRow key={exam.id}>
                     <TableCell className="font-medium">{exam.title}</TableCell>
-                    <TableCell>{exam.duration} min</TableCell>
+                    <TableCell>{exam.duration} sec/q</TableCell>
                     <TableCell>
                       +{exam.positive_marking} / -{exam.negative_marking}
                     </TableCell>
