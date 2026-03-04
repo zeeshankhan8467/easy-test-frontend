@@ -555,6 +555,28 @@ export function Questions() {
                     />
                   </div>
                 )}
+                {(aiRequest.type === 'mcq' || aiRequest.type === 'multiple_select') && (
+                  <div className="space-y-2">
+                    <Label>Option label format</Label>
+                    <Select
+                      value={aiRequest.option_display ?? 'alpha'}
+                      onValueChange={(value: 'alpha' | 'numeric') =>
+                        setAiRequest({ ...aiRequest, option_display: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="alpha">A, B, C, D...</SelectItem>
+                        <SelectItem value="numeric">1, 2, 3, 4...</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      How options are shown (e.g. A - option1 or 1 - option1).
+                    </p>
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button 

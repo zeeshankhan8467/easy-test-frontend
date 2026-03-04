@@ -61,7 +61,6 @@ export function ExamForm() {
     order: number;
     positive_marks: number;
     negative_marks: number;
-    is_optional: boolean;
   }>>([]);
 
   // Available questions for selection
@@ -100,7 +99,6 @@ export function ExamForm() {
           order: eq.order || 0,
           positive_marks: typeof eq.positive_marks === 'number' ? eq.positive_marks : parseFloat(eq.positive_marks) || 1.0,
           negative_marks: typeof eq.negative_marks === 'number' ? eq.negative_marks : parseFloat(eq.negative_marks) || 0.0,
-          is_optional: eq.is_optional || false,
         }));
         setSelectedQuestions(questions);
       }
@@ -144,9 +142,8 @@ export function ExamForm() {
     const newQuestion = {
       question,
       order: selectedQuestions.length,
-      positive_marks: typeof question.marks === 'number' ? question.marks : parseFloat(question.marks) || 1.0,
+      positive_marks: typeof question.marks === 'number' ? question.marks : (question.marks != null ? parseFloat(String(question.marks)) : 0) || 1.0,
       negative_marks: 0.0,
-      is_optional: false,
     };
 
     setSelectedQuestions([...selectedQuestions, newQuestion]);
@@ -163,16 +160,12 @@ export function ExamForm() {
     setSelectedQuestions(updated);
   };
 
-  const updateQuestionMarks = (questionId: string, field: 'positive_marks' | 'negative_marks' | 'is_optional', value: number | boolean) => {
+  const updateQuestionMarks = (questionId: string, field: 'positive_marks' | 'negative_marks', value: number) => {
     setSelectedQuestions(
       selectedQuestions.map((sq) => {
         if (sq.question.id === questionId) {
-          // Ensure numeric fields are numbers
-          if (field === 'positive_marks' || field === 'negative_marks') {
-            const numValue = typeof value === 'number' ? value : parseFloat(value as any) || 0;
-            return { ...sq, [field]: numValue };
-          }
-          return { ...sq, [field]: value };
+          const numValue = typeof value === 'number' ? value : parseFloat(value as any) || 0;
+          return { ...sq, [field]: numValue };
         }
         return sq;
       })
@@ -206,7 +199,7 @@ export function ExamForm() {
       return 'Exam title is required';
     }
     if (examData.duration < 1) {
-      return 'Duration must be at least 1 minute';
+      return 'Duration per question must be at least 1 second';
     }
     if (selectedQuestions.length === 0) {
       return 'At least one question is required';
@@ -240,7 +233,7 @@ export function ExamForm() {
         order: sq.order,
         positive_marks: sq.positive_marks,
         negative_marks: sq.negative_marks,
-        is_optional: sq.is_optional,
+        is_optional: false,
       }));
 
       if (id) {
@@ -302,7 +295,7 @@ export function ExamForm() {
         order: sq.order,
         positive_marks: sq.positive_marks,
         negative_marks: sq.negative_marks,
-        is_optional: sq.is_optional,
+        is_optional: false,
       }));
 
       await examService.update(id, {
@@ -430,11 +423,12 @@ export function ExamForm() {
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="duration">Duration (minutes) *</Label>
+                      <Label htmlFor="duration">Duration (seconds on each question) *</Label>
                       <Input
                         id="duration"
                         type="number"
                         min="1"
+                        placeholder="e.g. 30, 60"
                         value={examData.duration}
                         onChange={(e) =>
                           setExamData({
@@ -624,7 +618,6 @@ export function ExamForm() {
                             <TableHead>Question</TableHead>
                             <TableHead className="w-32">Positive Marks</TableHead>
                             <TableHead className="w-32">Negative Marks</TableHead>
-                            <TableHead className="w-24">Optional</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -670,18 +663,6 @@ export function ExamForm() {
                                       )
                                     }
                                     className="w-full"
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Checkbox
-                                    checked={sq.is_optional}
-                                    onCheckedChange={(checked) =>
-                                      updateQuestionMarks(
-                                        sq.question.id,
-                                        'is_optional',
-                                        checked as boolean
-                                      )
-                                    }
                                   />
                                 </TableCell>
                                 <TableCell className="text-right">
@@ -765,7 +746,7 @@ export function ExamForm() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Duration:</span>
-                          <span className="font-medium">{examData.duration} minutes</span>
+                          <span className="font-medium">{examData.duration} sec per question</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Mode:</span>
@@ -798,11 +779,6 @@ export function ExamForm() {
                                   <span className="text-xs px-2 py-0.5 bg-secondary rounded">
                                     {sq.question.difficulty}
                                   </span>
-                                  {sq.is_optional && (
-                                    <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900 rounded">
-                                      Optional
-                                    </span>
-                                  )}
                                 </div>
                                 <div
                                   className="prose prose-sm max-w-none text-sm"
