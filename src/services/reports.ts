@@ -7,6 +7,10 @@ export interface QuestionAnalysis {
   correct_attempts: number;
   accuracy: number;
   average_time: number;
+  options?: string[];
+  option_display?: 'alpha' | 'numeric';
+  correct_answer?: number[];
+  option_votes?: number[];
 }
 
 export interface ParticipantResult {

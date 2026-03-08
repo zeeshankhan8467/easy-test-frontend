@@ -315,35 +315,65 @@ export function Reports() {
               <Card>
                 <CardHeader>
                   <CardTitle>Question Details</CardTitle>
+                  <CardDescription>
+                    Per-question option breakdown. Correct option is highlighted in green.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Question</TableHead>
-                        <TableHead>Total Attempts</TableHead>
-                        <TableHead>Correct</TableHead>
-                        <TableHead>Accuracy</TableHead>
-                        <TableHead>Avg Time</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {report.question_analysis.map((q, index) => (
-                        <TableRow key={q.question_id}>
-                          <TableCell className="max-w-md">
-                            <div className="prose prose-sm max-w-none">
-                              <span className="font-medium">Q{index + 1}: </span>
-                              <span dangerouslySetInnerHTML={{ __html: q.question_text }} />
-                            </div>
-                          </TableCell>
-                          <TableCell>{q.total_attempts}</TableCell>
-                          <TableCell>{q.correct_attempts}</TableCell>
-                          <TableCell>{q.accuracy.toFixed(1)}%</TableCell>
-                          <TableCell>{q.average_time.toFixed(1)}s</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <div className="space-y-8">
+                    {report.question_analysis.map((q, index) => {
+                      const options = q.options ?? [];
+                      const optionVotes = q.option_votes ?? [];
+                      const correctIndices = new Set((q.correct_answer ?? []).map(Number));
+                      const totalVoted = q.total_attempts;
+                      const slideType = 'Choice';
+                      return (
+                        <div key={q.question_id} className="border rounded-lg p-4 space-y-3">
+                          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+                            <span className="font-medium">Q{index + 1}:</span>
+                            <span className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: q.question_text }} />
+                          </div>
+                          <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                            <span>Slide Type: {slideType}</span>
+                            <span>Correct Rate: {q.accuracy.toFixed(2)}%</span>
+                          </div>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Option</TableHead>
+                                <TableHead>Voted</TableHead>
+                                <TableHead>Percentage</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {options.map((opt, i) => {
+                                const voted = optionVotes[i] ?? 0;
+                                const pct = totalVoted > 0 ? (voted / totalVoted) * 100 : 0;
+                                const isCorrect = correctIndices.has(i);
+                                return (
+                                  <TableRow
+                                    key={i}
+                                    className={isCorrect ? 'bg-green-100 dark:bg-green-900/30' : undefined}
+                                  >
+                                    <TableCell className={isCorrect ? 'font-medium' : ''}>
+                                      {i + 1}/{String.fromCharCode(65 + i)}. {opt}
+                                    </TableCell>
+                                    <TableCell>{voted}</TableCell>
+                                    <TableCell>{pct.toFixed(2)}%</TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                              <TableRow className="bg-muted/50 font-medium">
+                                <TableCell>Voted</TableCell>
+                                <TableCell>{totalVoted}</TableCell>
+                                <TableCell>100.00%</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
