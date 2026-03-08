@@ -432,7 +432,7 @@ export function Participants() {
                     <TableHead key={key}>{getFieldByKey(key).label}</TableHead>
                   ))}
                   <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right sticky right-0 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.1)] min-w-[120px] z-10">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -450,7 +450,7 @@ export function Participants() {
                       );
                     })}
                     <TableCell>{new Date(participant.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right sticky right-0 bg-background shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)] z-10">
                       <div className="flex items-center justify-end gap-2">
                         <Button variant="ghost" size="icon" onClick={() => openView(participant)} title="View">
                           <Eye className="h-4 w-4" />

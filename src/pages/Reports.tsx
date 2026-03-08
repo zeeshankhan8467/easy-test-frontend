@@ -153,8 +153,11 @@ export function Reports() {
 
   const scoreDistribution = report?.participant_results.reduce(
     (acc, result) => {
-      const range = Math.floor(result.percentage / 20) * 20;
-      const key = `${range}-${range + 19}`;
+      // Cap at 100% so top bucket is 80-100% (not 100-119%)
+      const pct = Math.min(100, Math.max(0, Number(result.percentage) || 0));
+      const range = Math.floor(pct / 20) * 20;
+      // Top bucket: 80, 100 (from 80-100% scores) -> show as "80-100"
+      const key = range >= 80 ? '80-100' : `${range}-${range + 19}`;
       acc[key] = (acc[key] || 0) + 1;
       return acc;
     },
@@ -162,10 +165,13 @@ export function Reports() {
   );
 
   const distributionData = scoreDistribution
-    ? Object.entries(scoreDistribution).map(([range, count]) => ({
-        range,
-        count,
-      }))
+    ? Object.entries(scoreDistribution)
+        .map(([range, count]) => ({ range, count }))
+        .sort((a, b) => {
+          const startA = parseInt(a.range, 10);
+          const startB = parseInt(b.range, 10);
+          return startA - startB;
+        })
     : [];
 
   return (
