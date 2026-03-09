@@ -516,7 +516,6 @@ export function ExamForm() {
                           <SelectItem value="all">All Types</SelectItem>
                           <SelectItem value="mcq">MCQ</SelectItem>
                           <SelectItem value="true_false">True/False</SelectItem>
-                          <SelectItem value="multiple_select">Multiple Select</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

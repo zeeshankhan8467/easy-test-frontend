@@ -291,7 +291,7 @@ export function Participants() {
                 Add Participant
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl overflow-hidden">
+            <DialogContent className="sm:max-w-2xl lg:max-w-3xl">
               <DialogHeader>
                 <DialogTitle>Add Participant</DialogTitle>
                 <DialogDescription>
@@ -334,7 +334,7 @@ export function Participants() {
                 <DialogDescription>View participant information</DialogDescription>
               </DialogHeader>
               {viewParticipant && (
-                <div className="space-y-4 py-4 overflow-hidden">
+                <div className="space-y-4 py-4">
                   <div className="grid gap-2 text-sm">
                     {PARTICIPANT_FIELDS.map((f) => {
                       const val = f.key === 'name' ? viewParticipant.name
@@ -371,13 +371,13 @@ export function Participants() {
 
           {/* Edit participant dialog */}
           <Dialog open={editDialogOpen} onOpenChange={(open) => { setEditDialogOpen(open); if (!open) setEditParticipant(null); }}>
-            <DialogContent className="max-w-2xl overflow-hidden">
+            <DialogContent className="sm:max-w-xl lg:max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Edit participant</DialogTitle>
                 <DialogDescription>Update name, keypad ID, and custom fields.</DialogDescription>
               </DialogHeader>
               {editParticipant && (
-                <div className="space-y-4 py-4 overflow-hidden">
+                <div className="space-y-4 py-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {PARTICIPANT_FIELDS.map((f) => (
                       <div key={f.key} className="space-y-2">
