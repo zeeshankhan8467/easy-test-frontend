@@ -151,7 +151,13 @@ export function Dashboard() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={data.performance_data}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(val: string) => {
+                    const d = new Date(val + 'T00:00:00');
+                    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+                  }}
+                />
                 <YAxis />
                 <Tooltip />
                 <Legend />
