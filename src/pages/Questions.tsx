@@ -530,7 +530,6 @@ export function Questions() {
                       <SelectContent>
                         <SelectItem value="mcq">MCQ</SelectItem>
                         <SelectItem value="true_false">True/False</SelectItem>
-                        <SelectItem value="multiple_select">Multiple Select</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -555,7 +554,7 @@ export function Questions() {
                     />
                   </div>
                 )}
-                {(aiRequest.type === 'mcq' || aiRequest.type === 'multiple_select') && (
+                {aiRequest.type === 'mcq' && (
                   <div className="space-y-2">
                     <Label>Option label format</Label>
                     <Select

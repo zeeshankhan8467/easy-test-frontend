@@ -198,7 +198,6 @@ export function QuestionEditor({ question, onChange, errors }: QuestionEditorPro
             <SelectContent>
               <SelectItem value="mcq">Multiple Choice (MCQ)</SelectItem>
               <SelectItem value="true_false">True/False</SelectItem>
-              <SelectItem value="multiple_select">Multiple Select</SelectItem>
             </SelectContent>
           </Select>
         </div>

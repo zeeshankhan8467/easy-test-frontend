@@ -70,7 +70,7 @@ export function Sidebar() {
                 display: 'inline-block',
               }}
             >
-              EasyTest®
+              EasyTest
             </h1>
           </div>
 
