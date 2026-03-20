@@ -51,6 +51,8 @@ export interface AttendanceParticipant {
   name: string;
   email: string;
   present: boolean;
+  clicker_id?: string;
+  parent_email_id?: string;
 }
 
 export interface ExamAttendance {
@@ -59,6 +61,19 @@ export interface ExamAttendance {
   participants: AttendanceParticipant[];
   present_count: number;
   total_count: number;
+}
+
+export interface SendAttendanceEmailRequest {
+  scope: 'present' | 'absent' | 'all';
+  subject: string;
+  body: string;
+  participant_ids?: number[];
+}
+
+export interface SendAttendanceEmailResponse {
+  sent: number;
+  skipped: number;
+  errors: string[];
 }
 
 export const reportService = {
@@ -102,6 +117,30 @@ export const reportService = {
   getAttendance: async (examId: string): Promise<ExamAttendance> => {
     const response = await api.get<ExamAttendance>(`/exams/${examId}/attendance/`);
     return response.data;
+  },
+
+  sendAttendanceParentEmails: async (
+    examId: string,
+    data: SendAttendanceEmailRequest
+  ): Promise<SendAttendanceEmailResponse> => {
+    const response = await api.post<SendAttendanceEmailResponse>(
+      `/exams/${examId}/attendance/send-parent-emails/`,
+      data
+    );
+    return response.data;
+  },
+
+  exportAttendanceReport: async (
+    examId: string,
+    format: 'excel' | 'pdf'
+  ): Promise<Blob> => {
+    const response = await api.get(`/exams/${examId}/attendance/export/`, {
+      params: { file_format: format },
+      responseType: 'blob',
+    });
+    const blob = response.data as Blob;
+    // If backend returns an error JSON, it may come as blob; caller can still handle via status.
+    return blob;
   },
 };
 

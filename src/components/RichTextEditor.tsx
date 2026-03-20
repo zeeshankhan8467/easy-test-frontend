@@ -2,6 +2,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
+import Image from '@tiptap/extension-image';
 import { Button } from '@/components/ui/button';
 import { 
   Bold, 
@@ -12,10 +13,13 @@ import {
   Heading1,
   Heading2,
   Undo,
-  Redo
+  Redo,
+  ImageIcon,
+  Video
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
+import { VideoExtension } from '@/extensions/VideoExtension';
 
 interface RichTextEditorProps {
   content: string;
@@ -43,6 +47,11 @@ export function RichTextEditor({
         placeholder,
       }),
       Underline,
+      Image.configure({
+        inline: false,
+        allowBase64: false,
+      }),
+      VideoExtension,
     ],
     content,
     onUpdate: ({ editor }) => {
@@ -64,6 +73,20 @@ export function RichTextEditor({
       editor.commands.setContent(content);
     }
   }, [content, editor]);
+
+  const addImage = useCallback(() => {
+    const url = window.prompt('Enter image URL:');
+    if (url?.trim()) {
+      editor?.chain().focus().setImage({ src: url.trim() }).run();
+    }
+  }, [editor]);
+
+  const addVideo = useCallback(() => {
+    const url = window.prompt('Enter video URL (YouTube, Vimeo, or direct video link):');
+    if (url?.trim()) {
+      editor?.chain().focus().insertContent({ type: 'video', attrs: { src: url.trim() } }).run();
+    }
+  }, [editor]);
 
   if (!editor) {
     return null;
@@ -160,6 +183,27 @@ export function RichTextEditor({
           )}
         >
           <ListOrdered className="h-4 w-4" />
+        </Button>
+        <div className="w-px h-6 bg-border mx-1" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={addImage}
+          className="h-8 w-8 p-0"
+          title="Insert image"
+        >
+          <ImageIcon className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={addVideo}
+          className="h-8 w-8 p-0"
+          title="Insert video"
+        >
+          <Video className="h-4 w-4" />
         </Button>
         <div className="w-px h-6 bg-border mx-1" />
         <Button

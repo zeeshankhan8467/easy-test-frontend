@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { examService, Exam } from '@/services/exams';
-import { reportService, ExamReport, ExamAttendance } from '@/services/reports';
+import { reportService, ExamReport } from '@/services/reports';
 import { useToast } from '@/components/ui/use-toast';
 import { Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -41,10 +41,8 @@ export function Reports() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState<string>('');
   const [report, setReport] = useState<ExamReport | null>(null);
-  const [attendance, setAttendance] = useState<ExamAttendance | null>(null);
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -54,9 +52,6 @@ export function Reports() {
   useEffect(() => {
     if (selectedExamId) {
       loadReport();
-      loadAttendance();
-    } else {
-      setAttendance(null);
     }
   }, [selectedExamId]);
 
@@ -94,23 +89,6 @@ export function Reports() {
     }
   };
 
-  const loadAttendance = async () => {
-    if (!selectedExamId) return;
-    setAttendanceLoading(true);
-    setAttendance(null);
-    try {
-      const data = await reportService.getAttendance(selectedExamId);
-      setAttendance(data);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load attendance',
-        variant: 'destructive',
-      });
-    } finally {
-      setAttendanceLoading(false);
-    }
-  };
 
   const handleExport = async (format: 'excel' | 'csv', layout?: 'individual' | 'questions' | 'personal_achievement') => {
     if (!selectedExamId) return;
@@ -287,7 +265,6 @@ export function Reports() {
             <TabsList>
               <TabsTrigger value="questions">Question Analysis</TabsTrigger>
               <TabsTrigger value="participants">Participant Results</TabsTrigger>
-              <TabsTrigger value="attendance">Attendance</TabsTrigger>
             </TabsList>
 
             <TabsContent value="questions" className="space-y-4">
@@ -374,73 +351,6 @@ export function Reports() {
                       );
                     })}
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="attendance" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Attendance</CardTitle>
-                  <CardDescription>
-                    Who was marked present for this exam (via EasyTest Live clicker or submitted answers).
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {attendanceLoading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                  ) : attendance ? (
-                    <>
-                      <div className="flex gap-4 mb-4 text-sm">
-                        <span className="font-medium text-green-600">
-                          {attendance.present_count} present
-                        </span>
-                        <span className="text-muted-foreground">
-                          / {attendance.total_count} total
-                        </span>
-                      </div>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {attendance.participants.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                                No participants assigned to this exam.
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            attendance.participants.map((p) => (
-                              <TableRow key={p.id}>
-                                <TableCell className="font-medium">{p.name}</TableCell>
-                                <TableCell className="text-muted-foreground">{p.email}</TableCell>
-                                <TableCell>
-                                  <span
-                                    className={
-                                      p.present
-                                        ? 'text-green-600 font-medium'
-                                        : 'text-muted-foreground'
-                                    }
-                                  >
-                                    {p.present ? 'Present' : 'Absent'}
-                                  </span>
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground py-4">Select an exam to view attendance.</p>
-                  )}
                 </CardContent>
               </Card>
             </TabsContent>

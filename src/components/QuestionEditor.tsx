@@ -173,14 +173,14 @@ export function QuestionEditor({ question, onChange, errors }: QuestionEditorPro
         <RichTextEditor
           content={question.text || ''}
           onChange={(html) => onChange({ ...question, text: html })}
-          placeholder="Enter your question here. Use the toolbar to format text, add headings, lists, etc."
+          placeholder="Enter your question here. Use the toolbar to format text, add images, video, headings, and lists."
           error={!!errors?.text}
         />
         {errors?.text && (
           <p className="text-sm text-destructive">{errors.text}</p>
         )}
         <p className="text-xs text-muted-foreground">
-          Use the toolbar above to format your question with bold, italic, headings, lists, and more.
+          Use the toolbar to format text and insert images or videos (by URL) into the question.
         </p>
       </div>
 

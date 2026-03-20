@@ -10,8 +10,11 @@ export interface Question {
   difficulty: 'easy' | 'medium' | 'hard';
   tags?: string[];
   marks?: number;
+  image_url?: string | null;
+  video_url?: string | null;
   created_at: string;
   updated_at: string;
+  owner_name?: string | null;
 }
 
 export interface QuestionCreate {
@@ -23,6 +26,8 @@ export interface QuestionCreate {
   difficulty: 'easy' | 'medium' | 'hard';
   tags?: string[];
   marks?: number;
+  image_url?: string | null;
+  video_url?: string | null;
 }
 
 export interface AIGenerateRequest {

@@ -32,6 +32,7 @@ import { questionService, Question, QuestionCreate, AIGenerateRequest } from '@/
 import { useToast } from '@/components/ui/use-toast';
 import { Plus, Sparkles, Loader2, Trash2, Eye, Edit, Upload } from 'lucide-react';
 import { getOptionLabel } from '@/lib/optionDisplay';
+import { authService } from '@/services/auth';
 
 export function Questions() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -46,6 +47,9 @@ export function Questions() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewQuestion, setPreviewQuestion] = useState<Question | null>(null);
   const { toast } = useToast();
+
+  const user = authService.getCurrentUser();
+  const showOwner = user?.role === 'super_admin' || user?.role === 'school_admin';
 
   const [newQuestion, setNewQuestion] = useState<QuestionCreate>({
     text: '',
@@ -721,6 +725,7 @@ export function Questions() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Question</TableHead>
+                  {showOwner && <TableHead>Owner</TableHead>}
                   <TableHead>Type</TableHead>
                   <TableHead>Difficulty</TableHead>
                   <TableHead>Tags</TableHead>
@@ -736,6 +741,11 @@ export function Questions() {
                         dangerouslySetInnerHTML={{ __html: question.text }}
                       />
                     </TableCell>
+                    {showOwner && (
+                      <TableCell className="text-muted-foreground">
+                        {question.owner_name ?? '—'}
+                      </TableCell>
+                    )}
                     <TableCell className="capitalize">{question.type}</TableCell>
                     <TableCell>
                       <span
@@ -799,7 +809,7 @@ export function Questions() {
               <div>
                 <Label>Question</Label>
                 <div 
-                  className="mt-1 prose prose-sm max-w-none"
+                  className="mt-1 prose prose-sm max-w-none [&_.video-embed-wrapper]:my-2 [&_.video-embed-wrapper]iframe:rounded [&_img]:max-h-64 [&_img]:rounded"
                   dangerouslySetInnerHTML={{ __html: previewQuestion.text }}
                 />
               </div>

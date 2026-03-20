@@ -106,6 +106,25 @@
   margin-bottom: 1em;
 }
 
+.ProseMirror .video-embed-wrapper {
+  margin: 0.75rem 0;
+  max-width: 100%;
+}
+
+.ProseMirror .video-embed-wrapper iframe,
+.ProseMirror .video-embed-wrapper video {
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  border-radius: 0.375rem;
+}
+
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375rem;
+}
+
 .ProseMirror strong {
   font-weight: bold;
 }

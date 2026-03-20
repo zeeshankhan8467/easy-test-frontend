@@ -10,7 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { examService, Exam } from '@/services/exams';
 import { useToast } from '@/components/ui/use-toast';
 import { Plus, Edit, Trash2, Lock, Download, Loader2 } from 'lucide-react';
 import {
@@ -21,21 +20,51 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { authService } from '@/services/auth';
+import { schoolService, School } from '@/services/schools';
+import { examService, Exam, ExamOwner } from '@/services/exams';
 
 export function ExamList() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
+  const [filterSchoolId, setFilterSchoolId] = useState<number | ''>('');
+  const [filterOwnerUserId, setFilterOwnerUserId] = useState<number | ''>('');
+  const [schools, setSchools] = useState<School[]>([]);
+  const [owners, setOwners] = useState<ExamOwner[]>([]);
+  const user = authService.getCurrentUser();
+  const showFilters = user?.role === 'super_admin' || user?.role === 'school_admin';
+  const showSchoolFilter = user?.role === 'super_admin';
   const { toast } = useToast();
 
   useEffect(() => {
+    if (showSchoolFilter) {
+      schoolService.getAll().then(setSchools).catch(() => setSchools([]));
+    }
+    if (showFilters) {
+      examService.getOwners().then(setOwners).catch(() => setOwners([]));
+    }
+  }, [showSchoolFilter, showFilters]);
+
+  useEffect(() => {
     loadExams();
-  }, []);
+  }, [filterSchoolId, filterOwnerUserId]);
 
   const loadExams = async () => {
     try {
-      const data = await examService.getAll();
+      const params: { school_id?: number; owner_user_id?: number } = {};
+      if (showSchoolFilter && filterSchoolId !== '') params.school_id = filterSchoolId as number;
+      if (showFilters && filterOwnerUserId !== '') params.owner_user_id = filterOwnerUserId as number;
+      const data = await examService.getAll(params);
       // Ensure data is always an array
       if (Array.isArray(data)) {
         setExams(data);
@@ -151,6 +180,50 @@ export function ExamList() {
         <CardHeader>
           <CardTitle>All Exams</CardTitle>
           <CardDescription>List of all created exams</CardDescription>
+          {/* {showFilters && (
+            <div className="flex flex-wrap items-end gap-4 pt-4">
+              {showSchoolFilter && (
+                <div className="space-y-2">
+                  <Label>School</Label>
+                  <Select
+                    value={filterSchoolId === '' ? 'all' : String(filterSchoolId)}
+                    onValueChange={(v) => setFilterSchoolId(v === 'all' ? '' : (parseInt(v, 10) as number))}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="All schools" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All schools</SelectItem>
+                      {schools.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Owner</Label>
+                <Select
+                  value={filterOwnerUserId === '' ? 'all' : String(filterOwnerUserId)}
+                  onValueChange={(v) => setFilterOwnerUserId(v === 'all' ? '' : (parseInt(v, 10) as number))}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="All owners" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All owners</SelectItem>
+                    {owners.map((o) => (
+                      <SelectItem key={o.id} value={String(o.id)}>
+                        {o.name || o.email} ({o.role.replace('_', ' ')})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )} */}
         </CardHeader>
         <CardContent>
           {safeExams.length === 0 ? (
@@ -168,6 +241,12 @@ export function ExamList() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Title</TableHead>
+                  {showFilters && (
+                    <>
+                      {showSchoolFilter && <TableHead>School</TableHead>}
+                      <TableHead>Owner</TableHead>
+                    </>
+                  )}
                   <TableHead>Duration</TableHead>
                   <TableHead>Marking</TableHead>
                   <TableHead>Mode</TableHead>
@@ -181,6 +260,14 @@ export function ExamList() {
                 {safeExams.map((exam) => (
                   <TableRow key={exam.id}>
                     <TableCell className="font-medium">{exam.title}</TableCell>
+                    {showFilters && (
+                      <>
+                        {showSchoolFilter && (
+                          <TableCell className="text-muted-foreground">{exam.school_name ?? '—'}</TableCell>
+                        )}
+                        <TableCell className="text-muted-foreground">{exam.owner_name ?? '—'}</TableCell>
+                      </>
+                    )}
                     <TableCell>{exam.duration} sec/q</TableCell>
                     <TableCell>
                       +{exam.positive_marking} / -{exam.negative_marking}

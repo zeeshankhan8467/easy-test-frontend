@@ -18,6 +18,7 @@ export const PARTICIPANT_FIELDS = [
   { key: 'employee_code', label: 'Employee Code', required: false },
   { key: 'teacher_name', label: 'Teacher Name', required: false },
   { key: 'email_id', label: 'Email ID', required: false },
+  { key: 'parent_email_id', label: 'Parent Email ID', required: false },
 ] as const;
 
 export interface Participant {
@@ -28,6 +29,7 @@ export interface Participant {
   exam_id?: string;
   extra?: Record<string, string>;
   created_at: string;
+  owner_name?: string | null;
 }
 
 export interface ParticipantCreate {

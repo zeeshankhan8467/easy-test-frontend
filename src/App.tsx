@@ -10,10 +10,17 @@ import { ExamForm } from '@/pages/exams/ExamForm';
 import { Questions } from '@/pages/Questions';
 import { Participants } from '@/pages/Participants';
 import { Reports } from '@/pages/Reports';
+import { Attendance } from '@/pages/Attendance';
 import { Leaderboard } from '@/pages/Leaderboard';
+import { Schools } from '@/pages/Schools';
+import { SchoolAdmins } from '@/pages/SchoolAdmins';
+import { Teachers } from '@/pages/Teachers';
 import { authService } from '@/services/auth';
+import { canManageSchools, canCreateSchoolAdmin, canCreateTeacher } from '@/services/schools';
+import { useAuthUser } from '@/hooks/useAuthUser';
 
 function App() {
+  const currentUser = useAuthUser();
   return (
     <ErrorBoundary>
       <BrowserRouter>
@@ -99,11 +106,51 @@ function App() {
           }
         />
         <Route
+          path="/attendance"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Attendance />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/leaderboard"
           element={
             <ProtectedRoute>
               <Layout>
                 <Leaderboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/schools"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                {canManageSchools(currentUser?.role) ? <Schools /> : <Navigate to="/" replace />}
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/school-admins"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                {canCreateSchoolAdmin(currentUser?.role) ? <SchoolAdmins /> : <Navigate to="/" replace />}
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teachers"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                {canCreateTeacher(currentUser?.role) ? <Teachers /> : <Navigate to="/" replace />}
               </Layout>
             </ProtectedRoute>
           }
