@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -21,9 +21,21 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { participantService, Participant, ParticipantRow, PARTICIPANT_FIELDS } from '@/services/participants';
+import { schoolService, School } from '@/services/schools';
+import { examService, ExamOwner } from '@/services/exams';
 import { useToast } from '@/components/ui/use-toast';
 import { Upload, Plus, Loader2, Trash2, Edit, Eye } from 'lucide-react';
 import { authService } from '@/services/auth';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const ALL_SCHOOLS_VALUE = '__all_schools__';
+const ALL_TEACHERS_VALUE = '__all_teachers__';
 
 function buildEmptyRow(): ParticipantRow {
   const row: ParticipantRow = { name: '', clicker_id: '' };
@@ -50,16 +62,68 @@ export function Participants() {
 
   const user = authService.getCurrentUser();
   const showOwner = user?.role === 'super_admin' || user?.role === 'school_admin';
+  const showAdminFilters = user?.role === 'super_admin' || user?.role === 'school_admin';
+
+  const [schools, setSchools] = useState<School[]>([]);
+  const [examOwners, setExamOwners] = useState<ExamOwner[]>([]);
+  const [filterSchoolId, setFilterSchoolId] = useState<string>(() =>
+    user?.role === 'school_admin' && user.school_id != null ? String(user.school_id) : ''
+  );
+  const [filterTeacherId, setFilterTeacherId] = useState<string>('');
 
   const [createForm, setCreateForm] = useState<ParticipantRow>(() => buildEmptyRow());
 
   useEffect(() => {
-    loadParticipants();
-  }, []);
+    if (!showAdminFilters) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [schoolList, owners] = await Promise.all([schoolService.getAll(), examService.getOwners()]);
+        if (!cancelled) {
+          setSchools(Array.isArray(schoolList) ? schoolList : []);
+          setExamOwners(Array.isArray(owners) ? owners : []);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          toast({
+            title: 'Error',
+            description: 'Failed to load schools or teachers for filters',
+            variant: 'destructive',
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showAdminFilters]);
 
-  const loadParticipants = async () => {
+  const teacherOptions = useMemo(() => {
+    const sid = filterSchoolId ? Number(filterSchoolId) : null;
+    return examOwners
+      .filter((o) => {
+        if ((o.role || '').toLowerCase() !== 'teacher') return false;
+        if (sid == null || Number.isNaN(sid)) return true;
+        return o.school_id === sid;
+      })
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  }, [examOwners, filterSchoolId]);
+
+  const loadParticipants = useCallback(async () => {
+    setLoading(true);
     try {
-      const data = await participantService.getAll();
+      const listParams =
+        showAdminFilters && (filterSchoolId || filterTeacherId)
+          ? {
+              ...(filterSchoolId ? { school_id: Number(filterSchoolId) } : {}),
+              ...(filterTeacherId ? { teacher_id: Number(filterTeacherId) } : {}),
+            }
+          : undefined;
+      const data = await participantService.getAll(
+        listParams && Object.keys(listParams).length ? listParams : undefined
+      );
       setParticipants(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error('Failed to load participants:', error);
@@ -72,7 +136,11 @@ export function Participants() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showAdminFilters, filterSchoolId, filterTeacherId, toast]);
+
+  useEffect(() => {
+    loadParticipants();
+  }, [loadParticipants]);
 
   const updateCreateForm = (field: string, value: string) => {
     setCreateForm((prev) => ({ ...prev, [field]: value }));
@@ -430,6 +498,70 @@ export function Participants() {
           </Dialog>
         </div>
       </div>
+
+      {showAdminFilters ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Filter by school & teacher</CardTitle>
+            <CardDescription>
+              Choose a school, then a teacher to narrow the list. School admins see only their school.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-4">
+            <div className="space-y-2 flex-1 min-w-[200px]">
+              <Label>School</Label>
+              <Select
+                value={
+                  user?.role === 'school_admin'
+                    ? filterSchoolId || String(user.school_id ?? '')
+                    : filterSchoolId || ALL_SCHOOLS_VALUE
+                }
+                onValueChange={(v) => {
+                  if (user?.role === 'school_admin') return;
+                  setFilterSchoolId(v === ALL_SCHOOLS_VALUE ? '' : v);
+                  setFilterTeacherId('');
+                }}
+                disabled={user?.role === 'school_admin'}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select school" />
+                </SelectTrigger>
+                <SelectContent>
+                  {user?.role === 'super_admin' ? (
+                    <SelectItem value={ALL_SCHOOLS_VALUE}>All schools</SelectItem>
+                  ) : null}
+                  {schools.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 flex-1 min-w-[200px]">
+              <Label>Teacher</Label>
+              <Select
+                value={filterTeacherId || ALL_TEACHERS_VALUE}
+                onValueChange={(v) => setFilterTeacherId(v === ALL_TEACHERS_VALUE ? '' : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select teacher" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_TEACHERS_VALUE}>All teachers</SelectItem>
+                  {teacherOptions.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {user?.role === 'super_admin' && !filterSchoolId
+                        ? `${t.name} (${t.school_name || '—'})`
+                        : t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

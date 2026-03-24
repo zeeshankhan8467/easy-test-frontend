@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -28,89 +28,141 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Loader2, FileSpreadsheet, FileText, Mail, MessageCircle } from 'lucide-react';
-import { examService, Exam } from '@/services/exams';
-import { reportService, ExamAttendance } from '@/services/reports';
+import {
+  reportService,
+  DailyAttendanceDay,
+  DailyAttendanceParticipant,
+  DailyAttendanceSummaryRow,
+} from '@/services/reports';
 import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
+
+function localISODate(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatDaySidebar(iso: string): string {
+  const [y, mo, day] = iso.split('-').map(Number);
+  const dt = new Date(y, mo - 1, day);
+  return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+type StatusFilter = 'all' | 'present' | 'absent' | 'unmarked';
+type EmailScope = 'present' | 'absent' | 'all' | 'unmarked';
+
+function statusLabel(p: DailyAttendanceParticipant): string {
+  if (!p.marked) return 'Not recorded';
+  return p.present ? 'Present' : 'Absent';
+}
 
 export function Attendance() {
-  const [exams, setExams] = useState<Exam[]>([]);
-  const [selectedExamId, setSelectedExamId] = useState<string>('');
-  const [attendance, setAttendance] = useState<ExamAttendance | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<DailyAttendanceSummaryRow[]>([]);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string>(() => localISODate());
+  const [attendance, setAttendance] = useState<DailyAttendanceDay | null>(null);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'absent'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const { toast } = useToast();
 
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
-  const [emailScope, setEmailScope] = useState<'present' | 'absent' | 'all'>('absent');
+  const [emailScope, setEmailScope] = useState<EmailScope>('absent');
   const [emailSubject, setEmailSubject] = useState('Attendance update');
   const [emailBody, setEmailBody] = useState(
-    'Dear Parent/Guardian,\n\nThis is an attendance update for the exam: {{exam_title}}.\n\nStudent: {{student_name}}\nKeypad ID: {{clicker_id}}\nStatus: {{status}}\n\nRegards,\nEasyTest'
+    'Dear Parent/Guardian,\n\nThis is an attendance update for {{attendance_date}}.\n\nStudent: {{student_name}}\nKeypad ID: {{clicker_id}}\nStatus: {{status}}\n\nRegards,\nEasyTest'
   );
   const [sendingEmail, setSendingEmail] = useState(false);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
-  const [whatsAppScope, setWhatsAppScope] = useState<'present' | 'absent' | 'all'>('absent');
+  const [whatsAppScope, setWhatsAppScope] = useState<EmailScope>('absent');
   const [whatsAppMessage, setWhatsAppMessage] = useState(
-    'Dear Parent/Guardian,\n\nAttendance update for exam: {{exam_title}}\nStudent: {{student_name}}\nKeypad ID: {{clicker_id}}\nStatus: {{status}}'
+    'Dear Parent/Guardian,\n\nAttendance update for {{attendance_date}}\nStudent: {{student_name}}\nKeypad ID: {{clicker_id}}\nStatus: {{status}}'
   );
   const [whatsAppSearch, setWhatsAppSearch] = useState('');
   const [selectedWhatsAppStudentIds, setSelectedWhatsAppStudentIds] = useState<Set<number>>(new Set());
   const [studentSearch, setStudentSearch] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<number>>(new Set());
 
-  useEffect(() => {
-    const loadExams = async () => {
-      try {
-        const data = await examService.getAll();
-        setExams(data || []);
-      } catch (error: any) {
-        toast({
-          title: 'Error',
-          description: error.response?.data?.message || 'Failed to load exams',
-          variant: 'destructive',
-        });
-        setExams([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadExams();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const loadSummary = useCallback(async () => {
+    try {
+      const data = await reportService.getDailyAttendanceSummary(60);
+      setSummary(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || error.response?.data?.detail || 'Failed to load attendance summary',
+        variant: 'destructive',
+      });
+      setSummary([]);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
-    const loadAttendance = async () => {
-      if (!selectedExamId) {
-        setAttendance(null);
-        return;
-      }
+    loadSummary();
+  }, [loadSummary]);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    let cancelled = false;
+    const loadDay = async () => {
       setAttendanceLoading(true);
       setAttendance(null);
       try {
-        const data = await reportService.getAttendance(selectedExamId);
+        const data = await reportService.getDailyAttendanceDay(selectedDate);
+        if (cancelled) return;
         setAttendance(data);
       } catch {
-        toast({ title: 'Error', description: 'Failed to load attendance', variant: 'destructive' });
+        if (!cancelled) {
+          toast({ title: 'Error', description: 'Failed to load attendance for this day', variant: 'destructive' });
+        }
       } finally {
-        setAttendanceLoading(false);
+        if (!cancelled) setAttendanceLoading(false);
       }
     };
-    loadAttendance();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedExamId]);
+    loadDay();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, toast]);
+
+  const participantsView = useMemo(() => attendance?.participants ?? [], [attendance]);
+
+  const dayStats = useMemo(() => {
+    if (!attendance) {
+      return { present: 0, absent: 0, unmarked: 0, total: 0 };
+    }
+    return {
+      present: attendance.present_count,
+      absent: attendance.absent_count,
+      unmarked: attendance.unmarked_count,
+      total: attendance.total_count,
+    };
+  }, [attendance]);
 
   const filteredParticipants = useMemo(() => {
     const ps = attendance?.participants ?? [];
-    if (statusFilter === 'present') return ps.filter((p) => p.present);
-    if (statusFilter === 'absent') return ps.filter((p) => !p.present);
-    return ps;
+    return ps.filter((p) => {
+      if (statusFilter === 'present') return p.marked && p.present;
+      if (statusFilter === 'absent') return p.marked && !p.present;
+      if (statusFilter === 'unmarked') return !p.marked;
+      return true;
+    });
   }, [attendance, statusFilter]);
 
   const emailCandidates = useMemo(() => {
-    const ps = attendance?.participants ?? [];
+    const ps = participantsView;
     const scoped =
-      emailScope === 'present' ? ps.filter((p) => p.present) : emailScope === 'absent' ? ps.filter((p) => !p.present) : ps;
+      emailScope === 'present'
+        ? ps.filter((p) => p.marked && p.present)
+        : emailScope === 'absent'
+          ? ps.filter((p) => p.marked && !p.present)
+          : emailScope === 'unmarked'
+            ? ps.filter((p) => !p.marked)
+            : ps;
     const q = studentSearch.trim().toLowerCase();
     const searched = !q
       ? scoped
@@ -121,13 +173,18 @@ export function Attendance() {
           return name.includes(q) || clicker.includes(q) || parent.includes(q);
         });
     return searched;
-  }, [attendance, emailScope, studentSearch]);
+  }, [participantsView, emailScope, studentSearch]);
 
   const openEmailDialog = () => {
-    // Default: pre-select everyone in the chosen scope who has a parent email
-    const ps = attendance?.participants ?? [];
+    const ps = participantsView;
     const scoped =
-      emailScope === 'present' ? ps.filter((p) => p.present) : emailScope === 'absent' ? ps.filter((p) => !p.present) : ps;
+      emailScope === 'present'
+        ? ps.filter((p) => p.marked && p.present)
+        : emailScope === 'absent'
+          ? ps.filter((p) => p.marked && !p.present)
+          : emailScope === 'unmarked'
+            ? ps.filter((p) => !p.marked)
+            : ps;
     const ids = new Set<number>(
       scoped.filter((p) => (p.parent_email_id || '').trim()).map((p) => Number(p.id))
     );
@@ -137,9 +194,15 @@ export function Attendance() {
   };
 
   const whatsAppCandidates = useMemo(() => {
-    const ps = attendance?.participants ?? [];
+    const ps = participantsView;
     const scoped =
-      whatsAppScope === 'present' ? ps.filter((p) => p.present) : whatsAppScope === 'absent' ? ps.filter((p) => !p.present) : ps;
+      whatsAppScope === 'present'
+        ? ps.filter((p) => p.marked && p.present)
+        : whatsAppScope === 'absent'
+          ? ps.filter((p) => p.marked && !p.present)
+          : whatsAppScope === 'unmarked'
+            ? ps.filter((p) => !p.marked)
+            : ps;
     const q = whatsAppSearch.trim().toLowerCase();
     const searched = !q
       ? scoped
@@ -150,12 +213,18 @@ export function Attendance() {
           return name.includes(q) || clicker.includes(q) || mobile.includes(q);
         });
     return searched;
-  }, [attendance, whatsAppScope, whatsAppSearch]);
+  }, [participantsView, whatsAppScope, whatsAppSearch]);
 
   const openWhatsAppDialog = () => {
-    const ps = attendance?.participants ?? [];
+    const ps = participantsView;
     const scoped =
-      whatsAppScope === 'present' ? ps.filter((p) => p.present) : whatsAppScope === 'absent' ? ps.filter((p) => !p.present) : ps;
+      whatsAppScope === 'present'
+        ? ps.filter((p) => p.marked && p.present)
+        : whatsAppScope === 'absent'
+          ? ps.filter((p) => p.marked && !p.present)
+          : whatsAppScope === 'unmarked'
+            ? ps.filter((p) => !p.marked)
+            : ps;
     const ids = new Set<number>(
       scoped.filter((p) => (p.parent_whatsapp || '').trim()).map((p) => Number(p.id))
     );
@@ -165,13 +234,13 @@ export function Attendance() {
   };
 
   const handleDownload = async (format: 'excel' | 'pdf') => {
-    if (!selectedExamId) return;
+    if (!selectedDate) return;
     try {
-      const blob = await reportService.exportAttendanceReport(selectedExamId, format);
+      const blob = await reportService.exportDailyAttendanceReport(selectedDate, format);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       const ext = format === 'excel' ? 'xlsx' : 'pdf';
-      a.download = `attendance-${selectedExamId}.${ext}`;
+      a.download = `attendance-${selectedDate}.${ext}`;
       a.href = url;
       document.body.appendChild(a);
       a.click();
@@ -187,7 +256,7 @@ export function Attendance() {
   };
 
   const handleSendEmails = async () => {
-    if (!selectedExamId) return;
+    if (!selectedDate) return;
     const ids = Array.from(selectedStudentIds);
     if (ids.length === 0) {
       toast({ title: 'Validation', description: 'Select at least one student.', variant: 'destructive' });
@@ -195,7 +264,7 @@ export function Attendance() {
     }
     setSendingEmail(true);
     try {
-      const result = await reportService.sendAttendanceParentEmails(selectedExamId, {
+      const result = await reportService.sendDailyAttendanceParentEmails(selectedDate, {
         scope: emailScope,
         subject: emailSubject,
         body: emailBody,
@@ -222,7 +291,7 @@ export function Attendance() {
   };
 
   const handleSendWhatsApp = async () => {
-    if (!selectedExamId) return;
+    if (!selectedDate) return;
     const ids = Array.from(selectedWhatsAppStudentIds);
     if (ids.length === 0) {
       toast({ title: 'Validation', description: 'Select at least one student.', variant: 'destructive' });
@@ -230,12 +299,11 @@ export function Attendance() {
     }
     setSendingWhatsApp(true);
     try {
-      const result = await reportService.sendAttendanceParentWhatsApp(selectedExamId, {
+      const result = await reportService.sendDailyAttendanceParentWhatsApp(selectedDate, {
         scope: whatsAppScope,
         message: whatsAppMessage,
         participant_ids: ids,
       });
-      // Open links in new tabs for sending
       result.links.forEach((item) => window.open(item.link, '_blank', 'noopener,noreferrer'));
       toast({
         title: 'Success',
@@ -257,7 +325,7 @@ export function Attendance() {
     }
   };
 
-  if (loading) {
+  if (summaryLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -270,168 +338,189 @@ export function Attendance() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Attendance</h1>
-          <p className="text-muted-foreground mt-2">View attendance by exam and email parents/guardians</p>
+          <p className="text-muted-foreground mt-2">
+            View attendance by day. Marks are submitted from the EasyTest app; this page is read-only.
+          </p>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Select Exam</CardTitle>
-          <CardDescription>Select an exam from the dropdown to view attendance</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-2">
-            <Label>Exam</Label>
-            <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-              <SelectTrigger className="w-full max-w-md">
-                <SelectValue placeholder="Select an exam" />
-              </SelectTrigger>
-              <SelectContent>
-                {exams.map((exam) => (
-                  <SelectItem key={exam.id} value={exam.id}>
-                    {exam.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <aside className="w-full lg:w-56 shrink-0 border rounded-lg bg-card max-h-[min(70vh,520px)] overflow-y-auto p-2">
+          <p className="text-xs font-medium text-muted-foreground px-2 py-1.5">Days (newest first)</p>
+          <div className="flex flex-col gap-0.5">
+            {summary.length === 0 ? (
+              <p className="text-sm text-muted-foreground px-2 py-4">No data yet.</p>
+            ) : (
+              summary.map((day) => (
+                <button
+                  key={day.date}
+                  type="button"
+                  onClick={() => setSelectedDate(day.date)}
+                  className={cn(
+                    'text-left rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted',
+                    selectedDate === day.date && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground'
+                  )}
+                >
+                  <div className="font-medium leading-tight">{formatDaySidebar(day.date)}</div>
+                  <div
+                    className={cn(
+                      'text-xs mt-0.5 opacity-90',
+                      selectedDate === day.date ? 'text-primary-foreground/90' : 'text-muted-foreground'
+                    )}
+                  >
+                    {day.present_count}/{day.total_count} present
+                    {day.unmarked_count > 0 ? ` · ${day.unmarked_count} not recorded` : null}
+                  </div>
+                </button>
+              ))
+            )}
           </div>
+        </aside>
 
-          <div className="flex flex-wrap gap-2">
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="present">Present</SelectItem>
-                  <SelectItem value="absent">Absent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="flex-1 min-w-0 space-y-6 w-full">
+          <Card>
+            <CardHeader>
+              <CardTitle>{formatDaySidebar(selectedDate)}</CardTitle>
+              <CardDescription>
+                Roster and status for this date (as recorded in the app). Use filters and export if needed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex flex-wrap gap-2 items-end">
+                <div className="space-y-2">
+                  <Label>Status filter</Label>
+                  <Select value={statusFilter} onValueChange={(v: StatusFilter) => setStatusFilter(v)}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="present">Present</SelectItem>
+                      <SelectItem value="absent">Absent (recorded)</SelectItem>
+                      <SelectItem value="unmarked">Not recorded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="flex items-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={openEmailDialog}
-                disabled={!attendance || attendanceLoading}
-              >
-                <Mail className="h-4 w-4 mr-2" />
-                Send email to parents
-              </Button>
-            </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={openEmailDialog}
+                  disabled={!attendance || attendanceLoading}
+                >
+                  <Mail className="h-4 w-4 mr-2" />
+                  Send email to parents
+                </Button>
 
-            <div className="flex items-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={openWhatsAppDialog}
-                disabled={!attendance || attendanceLoading}
-              >
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Send attendance on WhatsApp
-              </Button>
-            </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={openWhatsAppDialog}
+                  disabled={!attendance || attendanceLoading}
+                >
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  Send on WhatsApp
+                </Button>
 
-            <div className="flex items-end gap-2 flex-wrap">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleDownload('excel')}
-                disabled={!selectedExamId}
-              >
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Download Excel
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleDownload('pdf')}
-                disabled={!selectedExamId}
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Download PDF
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Attendance</CardTitle>
-          <CardDescription>Present means the participant attempted or submitted answers</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {attendanceLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : attendance ? (
-            <>
-              <div className="flex gap-4 mb-4 text-sm">
-                <span className="font-medium text-green-600">{attendance.present_count} present</span>
-                <span className="text-muted-foreground">/ {attendance.total_count} total</span>
+                <Button type="button" variant="outline" onClick={() => handleDownload('excel')} disabled={!selectedDate}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+                <Button type="button" variant="outline" onClick={() => handleDownload('pdf')} disabled={!selectedDate}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredParticipants.length === 0 ? (
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Roster</CardTitle>
+              <CardDescription>
+                <span className="text-green-600 font-medium">{dayStats.present} present</span>
+                <span className="mx-2 text-muted-foreground">·</span>
+                <span className="text-amber-700 font-medium">{dayStats.absent} absent</span>
+                <span className="mx-2 text-muted-foreground">·</span>
+                <span className="text-muted-foreground">{dayStats.unmarked} not recorded</span>
+                <span className="mx-2 text-muted-foreground">·</span>
+                <span>{dayStats.total} total</span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {attendanceLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : attendance && attendance.participants.length > 0 ? (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                        No participants.
-                      </TableCell>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Keypad ID</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead className="min-w-[160px]">Attendance</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredParticipants.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{p.email}</TableCell>
-                        <TableCell>
-                          <span className={p.present ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
-                            {p.present ? 'Present' : 'Absent'}
-                          </span>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredParticipants.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                          No rows for this filter.
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </>
-          ) : (
-            <p className="text-muted-foreground py-4">Select an exam to view attendance.</p>
-          )}
-        </CardContent>
-      </Card>
+                    ) : (
+                      filteredParticipants.map((p) => (
+                          <TableRow key={p.id}>
+                            <TableCell className="font-medium">{p.name}</TableCell>
+                            <TableCell className="text-muted-foreground">{p.clicker_id ?? '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">{p.email || '—'}</TableCell>
+                            <TableCell>
+                              <span
+                                className={cn(
+                                  !p.marked && 'text-muted-foreground',
+                                  p.marked && p.present && 'text-green-600 font-medium',
+                                  p.marked && !p.present && 'text-amber-700 font-medium'
+                                )}
+                              >
+                                {statusLabel(p)}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                    )}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="text-muted-foreground py-4">No participants in your roster for this account.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Send email to parents/guardians</DialogTitle>
             <DialogDescription>
-              Emails are sent to each participant’s <strong>Parent Email ID</strong> (if available).
-              Template variables: <code>{'{{exam_title}}'}</code>, <code>{'{{student_name}}'}</code>, <code>{'{{clicker_id}}'}</code>, <code>{'{{status}}'}</code>.
+              Uses attendance recorded in the app for this day. Template variables:{' '}
+              <code>{'{{attendance_date}}'}</code>, <code>{'{{student_name}}'}</code>, <code>{'{{clicker_id}}'}</code>,{' '}
+              <code>{'{{status}}'}</code>, <code>{'{{exam_title}}'}</code> (optional).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Scope</Label>
-                <Select value={emailScope} onValueChange={(v: any) => setEmailScope(v)}>
+                <Select value={emailScope} onValueChange={(v: EmailScope) => setEmailScope(v)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="present">Present</SelectItem>
-                    <SelectItem value="absent">Absent</SelectItem>
+                    <SelectItem value="absent">Absent (recorded)</SelectItem>
+                    <SelectItem value="unmarked">Not recorded</SelectItem>
                     <SelectItem value="all">All</SelectItem>
                   </SelectContent>
                 </Select>
@@ -460,12 +549,7 @@ export function Attendance() {
                   >
                     Select all (filtered)
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSelectedStudentIds(new Set())}
-                  >
+                  <Button type="button" variant="outline" size="sm" onClick={() => setSelectedStudentIds(new Set())}>
                     Clear
                   </Button>
                 </div>
@@ -497,6 +581,7 @@ export function Attendance() {
                       emailCandidates.map((p) => {
                         const hasParentEmail = !!(p.parent_email_id || '').trim();
                         const checked = selectedStudentIds.has(Number(p.id));
+                        const label = statusLabel(p);
                         return (
                           <TableRow key={p.id} className={!hasParentEmail ? 'opacity-60' : undefined}>
                             <TableCell>
@@ -515,8 +600,12 @@ export function Attendance() {
                             <TableCell className="font-medium">{p.name}</TableCell>
                             <TableCell className="text-muted-foreground">{p.clicker_id ?? '—'}</TableCell>
                             <TableCell>
-                              <span className={p.present ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
-                                {p.present ? 'Present' : 'Absent'}
+                              <span
+                                className={
+                                  p.present ? 'text-green-600 font-medium' : p.marked ? 'text-amber-700' : 'text-muted-foreground'
+                                }
+                              >
+                                {label}
                               </span>
                             </TableCell>
                             <TableCell className="text-muted-foreground">
@@ -529,9 +618,7 @@ export function Attendance() {
                   </TableBody>
                 </Table>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Selected: {selectedStudentIds.size}
-              </p>
+              <p className="text-xs text-muted-foreground">Selected: {selectedStudentIds.size}</p>
             </div>
 
             <div className="space-y-2">
@@ -556,19 +643,21 @@ export function Attendance() {
           <DialogHeader>
             <DialogTitle>Send attendance on WhatsApp</DialogTitle>
             <DialogDescription>
-              Choose scope, message, and students. This will open WhatsApp links for selected parents.
+              Uses attendance from the app for this day. Placeholders:{' '}
+              <code>{'{{attendance_date}}'}</code>, <code>{'{{student_name}}'}</code>, etc.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Scope</Label>
-              <Select value={whatsAppScope} onValueChange={(v: any) => setWhatsAppScope(v)}>
+              <Select value={whatsAppScope} onValueChange={(v: EmailScope) => setWhatsAppScope(v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="present">Present</SelectItem>
-                  <SelectItem value="absent">Absent</SelectItem>
+                  <SelectItem value="absent">Absent (recorded)</SelectItem>
+                  <SelectItem value="unmarked">Not recorded</SelectItem>
                   <SelectItem value="all">All</SelectItem>
                 </SelectContent>
               </Select>
@@ -580,7 +669,7 @@ export function Attendance() {
                 rows={6}
                 value={whatsAppMessage}
                 onChange={(e) => setWhatsAppMessage(e.target.value)}
-                placeholder="Use {{exam_title}}, {{student_name}}, {{clicker_id}}, {{status}}"
+                placeholder="Use {{attendance_date}}, {{student_name}}, {{clicker_id}}, {{status}}"
               />
             </div>
 
@@ -599,6 +688,7 @@ export function Attendance() {
                     const id = Number(p.id);
                     const disabled = !(p.parent_whatsapp || '').trim();
                     const checked = selectedWhatsAppStudentIds.has(id);
+                    const label = statusLabel(p);
                     return (
                       <label
                         key={id}
@@ -607,7 +697,7 @@ export function Attendance() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{p.name}</p>
                           <p className="text-xs text-muted-foreground truncate">
-                            {p.clicker_id ? `Keypad: ${p.clicker_id}` : 'No keypad'} • {p.present ? 'Present' : 'Absent'}
+                            {p.clicker_id ? `Keypad: ${p.clicker_id}` : 'No keypad'} • {label}
                           </p>
                           <p className="text-xs text-muted-foreground truncate">
                             WhatsApp: {(p.parent_whatsapp || '').trim() || 'Not available'}
@@ -637,7 +727,11 @@ export function Attendance() {
               Cancel
             </Button>
             <Button onClick={handleSendWhatsApp} disabled={sendingWhatsApp}>
-              {sendingWhatsApp ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MessageCircle className="h-4 w-4 mr-2" />}
+              {sendingWhatsApp ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <MessageCircle className="h-4 w-4 mr-2" />
+              )}
               Send WhatsApp
             </Button>
           </DialogFooter>
@@ -646,4 +740,3 @@ export function Attendance() {
     </div>
   );
 }
-
