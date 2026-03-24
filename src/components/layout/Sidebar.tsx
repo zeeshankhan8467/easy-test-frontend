@@ -28,6 +28,7 @@ const baseNavigation = [
   { name: 'Question Bank', href: '/questions', icon: BookOpen },
   { name: 'Participants', href: '/participants', icon: Users },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
+  { name: 'Student Performance', href: '/student-performance', icon: BarChart3 },
   { name: 'Attendance', href: '/attendance', icon: CalendarCheck },
   { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
 ];

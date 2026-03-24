@@ -10,6 +10,7 @@ import { ExamForm } from '@/pages/exams/ExamForm';
 import { Questions } from '@/pages/Questions';
 import { Participants } from '@/pages/Participants';
 import { Reports } from '@/pages/Reports';
+import { StudentPerformance } from '@/pages/StudentPerformance';
 import { Attendance } from '@/pages/Attendance';
 import { Leaderboard } from '@/pages/Leaderboard';
 import { Schools } from '@/pages/Schools';
@@ -101,6 +102,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Reports />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/student-performance"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <StudentPerformance />
               </Layout>
             </ProtectedRoute>
           }

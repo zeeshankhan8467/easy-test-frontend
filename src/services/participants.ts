@@ -19,6 +19,7 @@ export const PARTICIPANT_FIELDS = [
   { key: 'teacher_name', label: 'Teacher Name', required: false },
   { key: 'email_id', label: 'Email ID', required: false },
   { key: 'parent_email_id', label: 'Parent Email ID', required: false },
+  { key: 'parent_whatsapp', label: 'Parent WhatsApp Number', required: false },
 ] as const;
 
 export interface Participant {

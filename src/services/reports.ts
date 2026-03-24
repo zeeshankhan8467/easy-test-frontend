@@ -53,6 +53,7 @@ export interface AttendanceParticipant {
   present: boolean;
   clicker_id?: string;
   parent_email_id?: string;
+  parent_whatsapp?: string;
 }
 
 export interface ExamAttendance {
@@ -74,6 +75,41 @@ export interface SendAttendanceEmailResponse {
   sent: number;
   skipped: number;
   errors: string[];
+}
+
+export interface SendAttendanceWhatsAppRequest {
+  scope: 'present' | 'absent' | 'all';
+  message: string;
+  participant_ids?: number[];
+}
+
+export interface SendAttendanceWhatsAppResponse {
+  sent: number;
+  skipped: number;
+  errors: string[];
+  links: Array<{
+    participant_id: number;
+    student_name: string;
+    phone: string;
+    link: string;
+  }>;
+}
+
+export interface StudentPerformanceRow {
+  participant_id: number;
+  admission_no: string;
+  roll_no: string;
+  student_name: string;
+  class_name: string;
+  section: string;
+  teacher_name: string;
+  subject: string;
+  total_percentage: number;
+}
+
+export interface StudentPerformanceResponse {
+  count: number;
+  results: StudentPerformanceRow[];
 }
 
 export const reportService = {
@@ -128,6 +164,54 @@ export const reportService = {
       data
     );
     return response.data;
+  },
+
+  sendAttendanceParentWhatsApp: async (
+    examId: string,
+    data: SendAttendanceWhatsAppRequest
+  ): Promise<SendAttendanceWhatsAppResponse> => {
+    const response = await api.post<SendAttendanceWhatsAppResponse>(
+      `/exams/${examId}/attendance/send-parent-whatsapp/`,
+      data
+    );
+    return response.data;
+  },
+
+  getStudentPerformanceReport: async (params?: {
+    admission_no?: string;
+    roll_no?: string;
+    student_name?: string;
+    class_name?: string;
+    section?: string;
+    teacher_name?: string;
+    subject?: string;
+    from_date?: string;
+    to_date?: string;
+  }): Promise<StudentPerformanceResponse> => {
+    const response = await api.get<StudentPerformanceResponse>('/reports/student-performance/', { params });
+    return response.data;
+  },
+
+  exportStudentPerformanceReport: async (
+    params?: {
+      admission_no?: string;
+      roll_no?: string;
+      student_name?: string;
+      class_name?: string;
+      section?: string;
+      teacher_name?: string;
+      subject?: string;
+      from_date?: string;
+      to_date?: string;
+      format?: 'excel' | 'csv';
+    }
+  ): Promise<Blob> => {
+    const { format, ...rest } = params || {};
+    const response = await api.get('/reports/student-performance/export/', {
+      params: { ...rest, file_format: format || 'excel' },
+      responseType: 'blob',
+    });
+    return response.data as Blob;
   },
 
   exportAttendanceReport: async (

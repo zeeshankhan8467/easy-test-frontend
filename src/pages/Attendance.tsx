@@ -27,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, FileSpreadsheet, FileText, Mail } from 'lucide-react';
+import { Loader2, FileSpreadsheet, FileText, Mail, MessageCircle } from 'lucide-react';
 import { examService, Exam } from '@/services/exams';
 import { reportService, ExamAttendance } from '@/services/reports';
 import { useToast } from '@/components/ui/use-toast';
@@ -48,6 +48,14 @@ export function Attendance() {
     'Dear Parent/Guardian,\n\nThis is an attendance update for the exam: {{exam_title}}.\n\nStudent: {{student_name}}\nKeypad ID: {{clicker_id}}\nStatus: {{status}}\n\nRegards,\nEasyTest'
   );
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
+  const [whatsAppScope, setWhatsAppScope] = useState<'present' | 'absent' | 'all'>('absent');
+  const [whatsAppMessage, setWhatsAppMessage] = useState(
+    'Dear Parent/Guardian,\n\nAttendance update for exam: {{exam_title}}\nStudent: {{student_name}}\nKeypad ID: {{clicker_id}}\nStatus: {{status}}'
+  );
+  const [whatsAppSearch, setWhatsAppSearch] = useState('');
+  const [selectedWhatsAppStudentIds, setSelectedWhatsAppStudentIds] = useState<Set<number>>(new Set());
   const [studentSearch, setStudentSearch] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<number>>(new Set());
 
@@ -128,6 +136,34 @@ export function Attendance() {
     setEmailDialogOpen(true);
   };
 
+  const whatsAppCandidates = useMemo(() => {
+    const ps = attendance?.participants ?? [];
+    const scoped =
+      whatsAppScope === 'present' ? ps.filter((p) => p.present) : whatsAppScope === 'absent' ? ps.filter((p) => !p.present) : ps;
+    const q = whatsAppSearch.trim().toLowerCase();
+    const searched = !q
+      ? scoped
+      : scoped.filter((p) => {
+          const name = (p.name || '').toLowerCase();
+          const clicker = (p.clicker_id || '').toLowerCase();
+          const mobile = (p.parent_whatsapp || '').toLowerCase();
+          return name.includes(q) || clicker.includes(q) || mobile.includes(q);
+        });
+    return searched;
+  }, [attendance, whatsAppScope, whatsAppSearch]);
+
+  const openWhatsAppDialog = () => {
+    const ps = attendance?.participants ?? [];
+    const scoped =
+      whatsAppScope === 'present' ? ps.filter((p) => p.present) : whatsAppScope === 'absent' ? ps.filter((p) => !p.present) : ps;
+    const ids = new Set<number>(
+      scoped.filter((p) => (p.parent_whatsapp || '').trim()).map((p) => Number(p.id))
+    );
+    setSelectedWhatsAppStudentIds(ids);
+    setWhatsAppSearch('');
+    setWhatsAppDialogOpen(true);
+  };
+
   const handleDownload = async (format: 'excel' | 'pdf') => {
     if (!selectedExamId) return;
     try {
@@ -182,6 +218,42 @@ export function Attendance() {
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     } finally {
       setSendingEmail(false);
+    }
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!selectedExamId) return;
+    const ids = Array.from(selectedWhatsAppStudentIds);
+    if (ids.length === 0) {
+      toast({ title: 'Validation', description: 'Select at least one student.', variant: 'destructive' });
+      return;
+    }
+    setSendingWhatsApp(true);
+    try {
+      const result = await reportService.sendAttendanceParentWhatsApp(selectedExamId, {
+        scope: whatsAppScope,
+        message: whatsAppMessage,
+        participant_ids: ids,
+      });
+      // Open links in new tabs for sending
+      result.links.forEach((item) => window.open(item.link, '_blank', 'noopener,noreferrer'));
+      toast({
+        title: 'Success',
+        description: `Generated ${result.sent} WhatsApp link(s). Skipped ${result.skipped}.`,
+      });
+      if (result.errors?.length) {
+        toast({
+          title: 'Warnings',
+          description: result.errors.slice(0, 3).join(' '),
+          variant: 'destructive',
+        });
+      }
+      setWhatsAppDialogOpen(false);
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail || error?.response?.data?.error || 'Failed to send WhatsApp messages';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    } finally {
+      setSendingWhatsApp(false);
     }
   };
 
@@ -248,6 +320,18 @@ export function Attendance() {
               >
                 <Mail className="h-4 w-4 mr-2" />
                 Send email to parents
+              </Button>
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={openWhatsAppDialog}
+                disabled={!attendance || attendanceLoading}
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Send attendance on WhatsApp
               </Button>
             </div>
 
@@ -462,6 +546,99 @@ export function Attendance() {
             <Button onClick={handleSendEmails} disabled={sendingEmail}>
               {sendingEmail ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={whatsAppDialogOpen} onOpenChange={setWhatsAppDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Send attendance on WhatsApp</DialogTitle>
+            <DialogDescription>
+              Choose scope, message, and students. This will open WhatsApp links for selected parents.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Scope</Label>
+              <Select value={whatsAppScope} onValueChange={(v: any) => setWhatsAppScope(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="present">Present</SelectItem>
+                  <SelectItem value="absent">Absent</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Message</Label>
+              <Textarea
+                rows={6}
+                value={whatsAppMessage}
+                onChange={(e) => setWhatsAppMessage(e.target.value)}
+                placeholder="Use {{exam_title}}, {{student_name}}, {{clicker_id}}, {{status}}"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Select students</Label>
+              <Input
+                placeholder="Search by name, keypad ID, or parent WhatsApp number"
+                value={whatsAppSearch}
+                onChange={(e) => setWhatsAppSearch(e.target.value)}
+              />
+              <div className="max-h-56 overflow-auto border rounded-md p-2 space-y-2">
+                {whatsAppCandidates.length === 0 ? (
+                  <p className="text-sm text-muted-foreground px-1 py-2">No students found.</p>
+                ) : (
+                  whatsAppCandidates.map((p) => {
+                    const id = Number(p.id);
+                    const disabled = !(p.parent_whatsapp || '').trim();
+                    const checked = selectedWhatsAppStudentIds.has(id);
+                    return (
+                      <label
+                        key={id}
+                        className={`flex items-center justify-between gap-3 rounded px-2 py-2 border ${disabled ? 'opacity-60' : 'cursor-pointer'}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{p.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {p.clicker_id ? `Keypad: ${p.clicker_id}` : 'No keypad'} • {p.present ? 'Present' : 'Absent'}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            WhatsApp: {(p.parent_whatsapp || '').trim() || 'Not available'}
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          disabled={disabled}
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = new Set(selectedWhatsAppStudentIds);
+                            if (e.target.checked) next.add(id);
+                            else next.delete(id);
+                            setSelectedWhatsAppStudentIds(next);
+                          }}
+                        />
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWhatsAppDialogOpen(false)} disabled={sendingWhatsApp}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendWhatsApp} disabled={sendingWhatsApp}>
+              {sendingWhatsApp ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MessageCircle className="h-4 w-4 mr-2" />}
+              Send WhatsApp
             </Button>
           </DialogFooter>
         </DialogContent>

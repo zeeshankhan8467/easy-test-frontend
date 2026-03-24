@@ -269,7 +269,7 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Import Participants</DialogTitle>
                 <DialogDescription>
-                  Upload CSV or Excel with columns: <strong>Name</strong>, <strong>Keypad ID</strong> (or &quot;keypad id&quot;) (required). Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;).
+                  Upload CSV or Excel with columns: <strong>Name</strong>, <strong>Keypad ID</strong> (or &quot;keypad id&quot;) (required). Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;), <strong>Parent WhatsApp Number</strong> (or &quot;parent phone&quot; / &quot;parent mobile&quot; / &quot;whatsapp&quot;).
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
