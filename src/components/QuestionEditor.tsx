@@ -180,7 +180,8 @@ export function QuestionEditor({ question, onChange, errors }: QuestionEditorPro
           <p className="text-sm text-destructive">{errors.text}</p>
         )}
         <p className="text-xs text-muted-foreground">
-          Use the toolbar to format text and insert images or videos (by URL) into the question.
+          Use the toolbar to upload images or videos from your computer, or use the link icon to paste a URL (YouTube,
+          Vimeo, or direct file link).
         </p>
       </div>
 
