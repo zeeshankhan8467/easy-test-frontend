@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -33,6 +33,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { Plus, Sparkles, Loader2, Trash2, Eye, Edit, Upload } from 'lucide-react';
 import { getOptionLabel } from '@/lib/optionDisplay';
 import { authService } from '@/services/auth';
+import { schoolService, School } from '@/services/schools';
+import { examService, ExamOwner } from '@/services/exams';
 
 export function Questions() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -50,6 +52,17 @@ export function Questions() {
 
   const user = authService.getCurrentUser();
   const showOwner = user?.role === 'super_admin' || user?.role === 'school_admin';
+
+  // School -> Teacher dependent filters (only for super_admin + school_admin)
+  const showFilters = user?.role === 'super_admin' || user?.role === 'school_admin';
+  const showSchoolFilter = user?.role === 'super_admin';
+  const [schools, setSchools] = useState<School[]>([]);
+  const [owners, setOwners] = useState<ExamOwner[]>([]);
+  const [filterSchoolId, setFilterSchoolId] = useState<number | ''>(() => {
+    if (user?.role === 'school_admin' && user.school_id != null) return user.school_id;
+    return '';
+  });
+  const [filterTeacherId, setFilterTeacherId] = useState<number | ''>('');
 
   const [newQuestion, setNewQuestion] = useState<QuestionCreate>({
     text: '',
@@ -77,12 +90,35 @@ export function Questions() {
   });
 
   useEffect(() => {
+    // Load dropdown options once for filtering
+    if (!showFilters) return;
+    if (showSchoolFilter) {
+      schoolService
+        .getAll()
+        .then(setSchools)
+        .catch(() => setSchools([]));
+    } else {
+      setSchools([]);
+    }
+    examService
+      .getOwners()
+      .then(setOwners)
+      .catch(() => setOwners([]));
+  }, [showFilters, showSchoolFilter]);
+
+  useEffect(() => {
     loadQuestions();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterDifficulty, filterSchoolId, filterTeacherId, showFilters]);
 
   const loadQuestions = async () => {
     try {
-      const data = await questionService.getAll();
+      const params: { school_id?: number; teacher_id?: number } = {};
+      if (showFilters) {
+        if (filterSchoolId !== '') params.school_id = filterSchoolId;
+        if (filterTeacherId !== '') params.teacher_id = filterTeacherId;
+      }
+      const data = await questionService.getAll(Object.keys(params).length ? params : undefined);
       // Ensure data is always an array
       if (Array.isArray(data)) {
         setQuestions(data);
@@ -410,6 +446,13 @@ export function Questions() {
       ? safeQuestions
       : safeQuestions.filter((q) => q.difficulty === filterDifficulty);
 
+  const teacherOptions = useMemo(() => {
+    if (!showFilters) return [];
+    const teachers = (owners || []).filter((o) => (o.role || '').toLowerCase() === 'teacher');
+    if (filterSchoolId === '') return teachers;
+    return teachers.filter((t) => t.school_id === filterSchoolId);
+  }, [owners, filterSchoolId, showFilters]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -702,17 +745,73 @@ export function Questions() {
                 {filteredQuestions.length} question(s) found
               </CardDescription>
             </div>
-            <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by difficulty" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Difficulties</SelectItem>
-                <SelectItem value="easy">Easy</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="hard">Hard</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap items-end gap-3 pt-1">
+              {showFilters ? (
+                <div className="space-y-2">
+                  <Label>School</Label>
+                  <Select
+                    value={filterSchoolId === '' ? 'all' : String(filterSchoolId)}
+                    onValueChange={(v) => {
+                      const next = v === 'all' ? '' : parseInt(v, 10);
+                      setFilterSchoolId(next);
+                      setFilterTeacherId('');
+                    }}
+                    disabled={!showSchoolFilter}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="All schools" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {showSchoolFilter && <SelectItem value="all">All schools</SelectItem>}
+                      {showSchoolFilter
+                        ? schools.map((s) => (
+                            <SelectItem key={s.id} value={String(s.id)}>
+                              {s.name}
+                            </SelectItem>
+                          ))
+                        : null}
+                      {!showSchoolFilter && filterSchoolId !== '' ? (
+                        <SelectItem value={String(filterSchoolId)}>Your school</SelectItem>
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+
+              {showFilters ? (
+                <div className="space-y-2">
+                  <Label>Teacher</Label>
+                  <Select
+                    value={filterTeacherId === '' ? 'all' : String(filterTeacherId)}
+                    onValueChange={(v) => setFilterTeacherId(v === 'all' ? '' : parseInt(v, 10))}
+                  >
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue placeholder="All teachers" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All teachers</SelectItem>
+                      {teacherOptions.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>
+                          {t.name} {t.school_name ? `(${t.school_name})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+
+              <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by difficulty" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Difficulties</SelectItem>
+                  <SelectItem value="easy">Easy</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="hard">Hard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

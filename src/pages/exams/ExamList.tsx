@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,7 +37,11 @@ export function ExamList() {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
-  const [filterSchoolId, setFilterSchoolId] = useState<number | ''>('');
+  const [filterSchoolId, setFilterSchoolId] = useState<number | ''>(() => {
+    const u = authService.getCurrentUser();
+    if (u?.role === 'school_admin' && u.school_id != null) return u.school_id;
+    return '';
+  });
   const [filterOwnerUserId, setFilterOwnerUserId] = useState<number | ''>('');
   const [schools, setSchools] = useState<School[]>([]);
   const [owners, setOwners] = useState<ExamOwner[]>([]);
@@ -45,6 +49,13 @@ export function ExamList() {
   const showFilters = user?.role === 'super_admin' || user?.role === 'school_admin';
   const showSchoolFilter = user?.role === 'super_admin';
   const { toast } = useToast();
+
+  const teacherOptions = useMemo(() => {
+    const teachers = (owners || []).filter((o) => (o.role || '').toLowerCase() === 'teacher');
+    if (!showFilters) return [];
+    if (filterSchoolId === '') return teachers;
+    return teachers.filter((t) => t.school_id === filterSchoolId);
+  }, [owners, filterSchoolId, showFilters]);
 
   useEffect(() => {
     if (showSchoolFilter) {
@@ -180,50 +191,60 @@ export function ExamList() {
         <CardHeader>
           <CardTitle>All Exams</CardTitle>
           <CardDescription>List of all created exams</CardDescription>
-          {/* {showFilters && (
+          {showFilters && (
             <div className="flex flex-wrap items-end gap-4 pt-4">
-              {showSchoolFilter && (
-                <div className="space-y-2">
-                  <Label>School</Label>
-                  <Select
-                    value={filterSchoolId === '' ? 'all' : String(filterSchoolId)}
-                    onValueChange={(v) => setFilterSchoolId(v === 'all' ? '' : (parseInt(v, 10) as number))}
-                  >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="All schools" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All schools</SelectItem>
-                      {schools.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
               <div className="space-y-2">
-                <Label>Owner</Label>
+                <Label>School</Label>
                 <Select
-                  value={filterOwnerUserId === '' ? 'all' : String(filterOwnerUserId)}
-                  onValueChange={(v) => setFilterOwnerUserId(v === 'all' ? '' : (parseInt(v, 10) as number))}
+                  value={filterSchoolId === '' ? 'all' : String(filterSchoolId)}
+                  onValueChange={(v) => {
+                    const next = v === 'all' ? '' : (parseInt(v, 10) as number);
+                    setFilterSchoolId(next);
+                    setFilterOwnerUserId('');
+                  }}
+                  disabled={!showSchoolFilter}
                 >
-                  <SelectTrigger className="w-[220px]">
-                    <SelectValue placeholder="All owners" />
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="All schools" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All owners</SelectItem>
-                    {owners.map((o) => (
-                      <SelectItem key={o.id} value={String(o.id)}>
-                        {o.name || o.email} ({o.role.replace('_', ' ')})
+                    {showSchoolFilter ? <SelectItem value="all">All schools</SelectItem> : null}
+                    {showSchoolFilter
+                      ? schools.map((s) => (
+                          <SelectItem key={s.id} value={String(s.id)}>
+                            {s.name}
+                          </SelectItem>
+                        ))
+                      : filterSchoolId !== '' && (
+                          <SelectItem value={String(filterSchoolId)}>Your school</SelectItem>
+                        )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Teacher</Label>
+                <Select
+                  value={filterOwnerUserId === '' ? 'all' : String(filterOwnerUserId)}
+                  onValueChange={(v) => {
+                    setFilterOwnerUserId(v === 'all' ? '' : (parseInt(v, 10) as number));
+                  }}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="All teachers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All teachers</SelectItem>
+                    {teacherOptions.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {t.name || t.email} {t.school_name ? `(${t.school_name})` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-          )} */}
+          )}
         </CardHeader>
         <CardContent>
           {safeExams.length === 0 ? (

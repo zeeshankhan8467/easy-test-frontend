@@ -63,6 +63,10 @@ export function ExamForm() {
     negative_marks: number;
   }>>([]);
 
+  // Bulk mark controls (apply to all selected questions at once)
+  const [bulkPositiveMarks, setBulkPositiveMarks] = useState<number>(1.0);
+  const [bulkNegativeMarks, setBulkNegativeMarks] = useState<number>(0.0);
+
   // Available questions for selection
   const [availableQuestions, setAvailableQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -121,6 +125,8 @@ export function ExamForm() {
           negative_marks: typeof eq.negative_marks === 'number' ? eq.negative_marks : parseFloat(eq.negative_marks) || 0.0,
         }));
         setSelectedQuestions(questions);
+        setBulkPositiveMarks(questions[0]?.positive_marks ?? 1.0);
+        setBulkNegativeMarks(questions[0]?.negative_marks ?? 0.0);
       }
     } catch (error: any) {
       toast({
@@ -173,6 +179,35 @@ export function ExamForm() {
     });
   };
 
+  const addAllAvailableQuestions = () => {
+    if (!availableQuestions.length) return;
+    const existingIds = new Set(selectedQuestions.map((sq) => sq.question.id));
+    const toAdd = availableQuestions.filter((q) => !existingIds.has(q.id));
+    if (!toAdd.length) {
+      toast({ title: 'Nothing to add', description: 'All available questions are already selected.' });
+      return;
+    }
+
+    const startOrder = selectedQuestions.length;
+    const newQuestions = toAdd.map((q, idx) => ({
+      question: q,
+      order: startOrder + idx,
+      positive_marks:
+        typeof q.marks === 'number'
+          ? q.marks
+          : q.marks != null
+            ? parseFloat(String(q.marks)) || 1.0
+            : 1.0,
+      negative_marks: 0.0,
+    }));
+
+    setSelectedQuestions([...selectedQuestions, ...newQuestions]);
+    toast({
+      title: 'Added all',
+      description: `${newQuestions.length} question(s) added to the exam.`,
+    });
+  };
+
   const removeQuestion = (questionId: string) => {
     const updated = selectedQuestions
       .filter((sq) => sq.question.id !== questionId)
@@ -190,6 +225,21 @@ export function ExamForm() {
         return sq;
       })
     );
+  };
+
+  const applyBulkMarksToSelected = () => {
+    if (!selectedQuestions.length) return;
+    setSelectedQuestions((prev) =>
+      prev.map((sq) => ({
+        ...sq,
+        positive_marks: bulkPositiveMarks,
+        negative_marks: bulkNegativeMarks,
+      }))
+    );
+    toast({
+      title: 'Marks applied',
+      description: 'Positive/negative marks applied to all selected questions.',
+    });
   };
 
   const moveQuestion = (questionId: string, direction: 'up' | 'down') => {
@@ -651,7 +701,19 @@ export function ExamForm() {
 
                   {/* Available Questions */}
                   <div className="space-y-2">
-                    <Label>Available Questions ({availableQuestions.length})</Label>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label>Available Questions ({availableQuestions.length})</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addAllAvailableQuestions}
+                        disabled={!availableQuestions.length || availableQuestions.length === selectedQuestions.length}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add All
+                      </Button>
+                    </div>
                     {loadingQuestions ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -738,6 +800,45 @@ export function ExamForm() {
                     </div>
                   ) : (
                     <div className="space-y-4">
+                      <div className="flex flex-wrap gap-4 items-end">
+                        <div className="space-y-2">
+                          <Label>Positive marks (all)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={bulkPositiveMarks}
+                            onChange={(e) =>
+                              setBulkPositiveMarks(parseFloat(e.target.value) || 0)
+                            }
+                            className="w-36"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Negative marks (all)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={bulkNegativeMarks}
+                            onChange={(e) =>
+                              setBulkNegativeMarks(parseFloat(e.target.value) || 0)
+                            }
+                            className="w-36"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={applyBulkMarksToSelected}
+                          disabled={selectedQuestions.length === 0}
+                        >
+                          Apply marks to all
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        This overwrites marks for every selected question.
+                      </p>
+
                       <Table>
                         <TableHeader>
                           <TableRow>
