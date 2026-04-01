@@ -95,11 +95,18 @@ export function Leaderboard() {
     }
   };
 
-  const getRankIcon = (rank: number) => {
-    if (rank === 1) return <Trophy className="h-6 w-6 text-yellow-500" />;
-    if (rank === 2) return <Medal className="h-6 w-6 text-gray-400" />;
-    if (rank === 3) return <Award className="h-6 w-6 text-amber-600" />;
-    return <span className="text-lg font-bold">#{rank}</span>;
+  const formatDurationSeconds = (totalSeconds: number) => {
+    const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}m ${sec.toString().padStart(2, '0')}s`;
+  };
+
+  const rankMedal = (rank: number) => {
+    if (rank === 1) return <Trophy className="h-6 w-6 shrink-0 text-yellow-500" aria-hidden />;
+    if (rank === 2) return <Medal className="h-6 w-6 shrink-0 text-gray-400" aria-hidden />;
+    if (rank === 3) return <Award className="h-6 w-6 shrink-0 text-amber-600" aria-hidden />;
+    return null;
   };
 
   if (loading) {
@@ -244,7 +251,8 @@ export function Leaderboard() {
                     <TableRow key={entry.participant_id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {getRankIcon(entry.rank)}
+                          {rankMedal(entry.rank)}
+                          <span className="text-lg font-bold tabular-nums">#{entry.rank}</span>
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">
@@ -258,7 +266,7 @@ export function Leaderboard() {
                         {entry.percentage.toFixed(1)}%
                       </TableCell>
                       <TableCell>
-                        {Math.floor(entry.time_taken / 60)}m {entry.time_taken % 60}s
+                        {formatDurationSeconds(entry.time_taken)}
                       </TableCell>
                     </TableRow>
                   ))}
