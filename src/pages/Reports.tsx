@@ -417,6 +417,11 @@ export function Reports() {
                         <TableHead>Unattempted</TableHead>
                         <TableHead>Time</TableHead>
                         <TableHead>Percentage</TableHead>
+                        {report.question_analysis.map((q, i) => (
+                          <TableHead key={q.question_id} className="text-center whitespace-nowrap">
+                            Q{i + 1} answer
+                          </TableHead>
+                        ))}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -440,6 +445,17 @@ export function Reports() {
                           <TableCell className="font-medium">
                             {result.percentage.toFixed(1)}%
                           </TableCell>
+                          {report.question_analysis.map((q) => {
+                            const qa = result.question_answers?.find(
+                              (x) => Number(x.question_id) === Number(q.question_id),
+                            );
+                            const label = qa?.response?.trim() ? qa.response : '—';
+                            return (
+                              <TableCell key={q.question_id} className="text-center tabular-nums">
+                                {label}
+                              </TableCell>
+                            );
+                          })}
                         </TableRow>
                       ))}
                     </TableBody>

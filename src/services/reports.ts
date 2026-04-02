@@ -13,6 +13,14 @@ export interface QuestionAnalysis {
   option_votes?: number[];
 }
 
+/** Per-question attempt row; response/correct_answer use A,B,C… or 1,2,3… per question option_display. */
+export interface ParticipantQuestionAnswer {
+  question_id: number;
+  response: string;
+  correct_answer: string;
+  is_correct: boolean | null;
+}
+
 export interface ParticipantResult {
   participant_id: string;
   participant_name: string;
@@ -25,6 +33,7 @@ export interface ParticipantResult {
   /** Total time (seconds), same basis as leaderboard — sum of per-question times. */
   time_taken: number;
   rank: number;
+  question_answers?: ParticipantQuestionAnswer[];
 }
 
 export interface ExamReport {
@@ -113,11 +122,11 @@ export interface SendAttendanceWhatsAppResponse {
   sent: number;
   skipped: number;
   errors: string[];
-  links: Array<{
+  messages?: Array<{
     participant_id: number;
     student_name: string;
     phone: string;
-    link: string;
+    message_id?: string | number;
   }>;
 }
 

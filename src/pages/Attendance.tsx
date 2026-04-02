@@ -304,10 +304,9 @@ export function Attendance() {
         message: whatsAppMessage,
         participant_ids: ids,
       });
-      result.links.forEach((item) => window.open(item.link, '_blank', 'noopener,noreferrer'));
       toast({
         title: 'Success',
-        description: `Generated ${result.sent} WhatsApp link(s). Skipped ${result.skipped}.`,
+        description: `Sent ${result.sent} WhatsApp message(s). Skipped ${result.skipped}.`,
       });
       if (result.errors?.length) {
         toast({
