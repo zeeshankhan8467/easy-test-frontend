@@ -72,6 +72,18 @@ export function Reports() {
     }
   };
 
+  const formatDurationSeconds = (totalSeconds: number) => {
+    const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}m ${sec.toString().padStart(2, '0')}s`;
+  };
+
+  const formatAverageSeconds = (sec: number) => {
+    const n = Math.max(0, Number(sec) || 0);
+    return `${n.toFixed(1)}s avg`;
+  };
+
   const loadReport = async () => {
     if (!selectedExamId) return;
     setReportLoading(true);
@@ -313,6 +325,7 @@ export function Reports() {
                           <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
                             <span>Slide Type: {slideType}</span>
                             <span>Correct Rate: {q.accuracy.toFixed(2)}%</span>
+                            <span>Avg. time: {formatAverageSeconds(q.average_time)}</span>
                           </div>
                           <Table>
                             <TableHeader>
@@ -402,6 +415,7 @@ export function Reports() {
                         <TableHead>Correct</TableHead>
                         <TableHead>Wrong</TableHead>
                         <TableHead>Unattempted</TableHead>
+                        <TableHead>Time</TableHead>
                         <TableHead>Percentage</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -420,6 +434,9 @@ export function Reports() {
                             {result.wrong_answers}
                           </TableCell>
                           <TableCell>{result.unattempted}</TableCell>
+                          <TableCell className="text-muted-foreground tabular-nums">
+                            {formatDurationSeconds(result.time_taken ?? 0)}
+                          </TableCell>
                           <TableCell className="font-medium">
                             {result.percentage.toFixed(1)}%
                           </TableCell>

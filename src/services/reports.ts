@@ -22,6 +22,8 @@ export interface ParticipantResult {
   wrong_answers: number;
   unattempted: number;
   percentage: number;
+  /** Total time (seconds), same basis as leaderboard — sum of per-question times. */
+  time_taken: number;
   rank: number;
 }
 
