@@ -17,6 +17,9 @@ export interface Exam {
   description?: string;
   duration: number; // seconds per question (for session timer)
   revisable: boolean;
+  show_live_response: boolean;
+  show_response_after_completion: boolean;
+  question_change_automatic: boolean;
   status: 'draft' | 'frozen' | 'completed';
   positive_marking: number; // Legacy - kept for backward compatibility
   negative_marking: number; // Legacy
@@ -28,6 +31,19 @@ export interface Exam {
   total_marks?: number;
   questions?: ExamQuestion[];
   can_edit?: boolean;
+  school_id?: number | null;
+  school_name?: string | null;
+  owner_id?: number | null;
+  owner_name?: string | null;
+}
+
+export interface ExamOwner {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  school_id: number | null;
+  school_name: string;
 }
 
 export interface ExamQuestionInput {
@@ -43,8 +59,12 @@ export interface ExamCreate {
   description?: string;
   duration: number;
   revisable: boolean;
+  show_live_response: boolean;
+  show_response_after_completion: boolean;
+  question_change_automatic: boolean;
   questions?: ExamQuestionInput[]; // Optional for draft
   status?: 'draft' | 'frozen' | 'completed';
+  owner_user_id?: number | null;
 }
 
 export interface ExamUpdate extends Partial<ExamCreate> {
@@ -52,8 +72,13 @@ export interface ExamUpdate extends Partial<ExamCreate> {
 }
 
 export const examService = {
-  getAll: async (): Promise<Exam[]> => {
-    const response = await api.get<any>('/exams/');
+  getAll: async (params?: { school_id?: number; owner_user_id?: number }): Promise<Exam[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.school_id != null) queryParams.append('school_id', String(params.school_id));
+    if (params?.owner_user_id != null) queryParams.append('owner_user_id', String(params.owner_user_id));
+    const qs = queryParams.toString();
+    const url = qs ? `/exams/?${qs}` : '/exams/';
+    const response = await api.get<any>(url);
     // Handle DRF pagination response
     if (response.data && Array.isArray(response.data)) {
       return response.data;
@@ -61,6 +86,11 @@ export const examService = {
       return response.data.results;
     }
     return [];
+  },
+
+  getOwners: async (): Promise<ExamOwner[]> => {
+    const response = await api.get<ExamOwner[]>('/users/exam-owners/');
+    return Array.isArray(response.data) ? response.data : [];
   },
 
   getById: async (id: string): Promise<Exam> => {

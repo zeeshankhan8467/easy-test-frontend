@@ -10,8 +10,11 @@ export interface Question {
   difficulty: 'easy' | 'medium' | 'hard';
   tags?: string[];
   marks?: number;
+  image_url?: string | null;
+  video_url?: string | null;
   created_at: string;
   updated_at: string;
+  owner_name?: string | null;
 }
 
 export interface QuestionCreate {
@@ -23,6 +26,8 @@ export interface QuestionCreate {
   difficulty: 'easy' | 'medium' | 'hard';
   tags?: string[];
   marks?: number;
+  image_url?: string | null;
+  video_url?: string | null;
 }
 
 export interface AIGenerateRequest {
@@ -40,9 +45,19 @@ export interface QuestionImportParams {
   file: File;
 }
 
+export interface QuestionListParams {
+  school_id?: number;
+  teacher_id?: number;
+}
+
 export const questionService = {
-  getAll: async (): Promise<Question[]> => {
-    const response = await api.get<any>('/questions/');
+  getAll: async (params?: QuestionListParams): Promise<Question[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.school_id != null) queryParams.set('school_id', String(params.school_id));
+    if (params?.teacher_id != null) queryParams.set('teacher_id', String(params.teacher_id));
+    const qs = queryParams.toString();
+    const url = qs ? `/questions/?${qs}` : '/questions/';
+    const response = await api.get<any>(url);
     // Handle DRF pagination response
     if (response.data && Array.isArray(response.data)) {
       return response.data;

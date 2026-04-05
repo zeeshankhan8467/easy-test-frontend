@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -21,8 +21,21 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { participantService, Participant, ParticipantRow, PARTICIPANT_FIELDS } from '@/services/participants';
+import { schoolService, School } from '@/services/schools';
+import { examService, ExamOwner } from '@/services/exams';
 import { useToast } from '@/components/ui/use-toast';
 import { Upload, Plus, Loader2, Trash2, Edit, Eye } from 'lucide-react';
+import { authService } from '@/services/auth';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const ALL_SCHOOLS_VALUE = '__all_schools__';
+const ALL_TEACHERS_VALUE = '__all_teachers__';
 
 function buildEmptyRow(): ParticipantRow {
   const row: ParticipantRow = { name: '', clicker_id: '' };
@@ -47,24 +60,71 @@ export function Participants() {
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
+  const user = authService.getCurrentUser();
+  const showOwner = user?.role === 'super_admin' || user?.role === 'school_admin';
+  const showAdminFilters = user?.role === 'super_admin' || user?.role === 'school_admin';
+
+  const [schools, setSchools] = useState<School[]>([]);
+  const [examOwners, setExamOwners] = useState<ExamOwner[]>([]);
+  const [filterSchoolId, setFilterSchoolId] = useState<string>(() =>
+    user?.role === 'school_admin' && user.school_id != null ? String(user.school_id) : ''
+  );
+  const [filterTeacherId, setFilterTeacherId] = useState<string>('');
+
   const [createForm, setCreateForm] = useState<ParticipantRow>(() => buildEmptyRow());
 
   useEffect(() => {
-    loadParticipants();
-  }, []);
-
-  const loadParticipants = async () => {
-    try {
-      const data = await participantService.getAll();
-      // Ensure data is always an array
-      if (Array.isArray(data)) {
-        setParticipants(data);
-      } else if (data && Array.isArray(data.results)) {
-        setParticipants(data.results);
-      } else {
-        console.warn('Unexpected data format:', data);
-        setParticipants([]);
+    if (!showAdminFilters) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [schoolList, owners] = await Promise.all([schoolService.getAll(), examService.getOwners()]);
+        if (!cancelled) {
+          setSchools(Array.isArray(schoolList) ? schoolList : []);
+          setExamOwners(Array.isArray(owners) ? owners : []);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          toast({
+            title: 'Error',
+            description: 'Failed to load schools or teachers for filters',
+            variant: 'destructive',
+          });
+        }
       }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showAdminFilters]);
+
+  const teacherOptions = useMemo(() => {
+    const sid = filterSchoolId ? Number(filterSchoolId) : null;
+    return examOwners
+      .filter((o) => {
+        if ((o.role || '').toLowerCase() !== 'teacher') return false;
+        if (sid == null || Number.isNaN(sid)) return true;
+        return o.school_id === sid;
+      })
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  }, [examOwners, filterSchoolId]);
+
+  const loadParticipants = useCallback(async () => {
+    setLoading(true);
+    try {
+      const listParams =
+        showAdminFilters && (filterSchoolId || filterTeacherId)
+          ? {
+              ...(filterSchoolId ? { school_id: Number(filterSchoolId) } : {}),
+              ...(filterTeacherId ? { teacher_id: Number(filterTeacherId) } : {}),
+            }
+          : undefined;
+      const data = await participantService.getAll(
+        listParams && Object.keys(listParams).length ? listParams : undefined
+      );
+      setParticipants(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error('Failed to load participants:', error);
       toast({
@@ -76,7 +136,11 @@ export function Participants() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showAdminFilters, filterSchoolId, filterTeacherId, toast]);
+
+  useEffect(() => {
+    loadParticipants();
+  }, [loadParticipants]);
 
   const updateCreateForm = (field: string, value: string) => {
     setCreateForm((prev) => ({ ...prev, [field]: value }));
@@ -98,7 +162,7 @@ export function Participants() {
     });
     const emailVal = rest.email_id;
     if (emailVal) delete rest.email_id;
-    const payload: Record<string, string> = { name, clicker_id, ...rest };
+    const payload: ParticipantRow = { name, clicker_id, ...rest };
     if (emailVal) payload.email = emailVal;
     setCreating(true);
     try {
@@ -166,6 +230,17 @@ export function Participants() {
     setViewDialogOpen(true);
   };
 
+  const dialogFieldOrder = [
+    'clicker_id',
+    'name',
+    'roll_no',
+    'admission_no',
+    'parent_email_id',
+    ...PARTICIPANT_FIELDS.map((f) => f.key).filter(
+      (k) => !['clicker_id', 'name', 'roll_no', 'admission_no', 'parent_email_id'].includes(k)
+    ),
+  ];
+
   const openEdit = (p: Participant) => {
     setEditParticipant(p);
     const form: Record<string, string> = {};
@@ -215,12 +290,19 @@ export function Participants() {
     }
   };
 
-  // Table column order: Keypad ID first, then Name, then rest of PARTICIPANT_FIELDS
+  // Table: Keypad ID, Name, Roll No., Admission No., then Owner + Parent Email ID, then remaining fields
   const tableColumnOrder = [
     'clicker_id',
     'name',
-    ...PARTICIPANT_FIELDS.map((f) => f.key).filter((k) => k !== 'clicker_id' && k !== 'name'),
-  ];
+    'roll_no',
+    'admission_no',
+    ...(showOwner ? (['__owner__'] as const) : []),
+    'parent_email_id',
+    ...PARTICIPANT_FIELDS.map((f) => f.key).filter(
+      (k) =>
+        !['clicker_id', 'name', 'roll_no', 'admission_no', 'parent_email_id'].includes(k)
+    ),
+  ] as string[];
   const getFieldByKey = (key: string) => PARTICIPANT_FIELDS.find((f) => f.key === key)!;
 
   // Ensure participants is always an array
@@ -255,7 +337,7 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Import Participants</DialogTitle>
                 <DialogDescription>
-                  Upload CSV or Excel with columns: <strong>Name</strong>, <strong>Keypad ID</strong> (or &quot;keypad id&quot;) (required). Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID.
+                  Upload CSV or Excel with columns: <strong>Name</strong>, <strong>Keypad ID</strong> (or &quot;keypad id&quot;) (required). Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;), <strong>Parent WhatsApp Number</strong> (or &quot;parent phone&quot; / &quot;parent mobile&quot; / &quot;whatsapp&quot;).
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -309,7 +391,7 @@ export function Participants() {
                       placeholder={f.required ? '' : `Optional`}
                       value={createForm[f.key] ?? ''}
                       onChange={(e) => updateCreateForm(f.key, e.target.value)}
-                      type={f.key === 'email_id' ? 'email' : 'text'}
+                      type={f.key === 'email_id' || f.key === 'parent_email_id' ? 'email' : 'text'}
                     />
                   </div>
                 ))}
@@ -336,18 +418,25 @@ export function Participants() {
               {viewParticipant && (
                 <div className="space-y-4 py-4">
                   <div className="grid gap-2 text-sm">
-                    {PARTICIPANT_FIELDS.map((f) => {
-                      const val = f.key === 'name' ? viewParticipant.name
-                        : f.key === 'clicker_id' ? viewParticipant.clicker_id
-                        : f.key === 'email_id' ? (viewParticipant.extra?.email_id ?? viewParticipant.email)
-                        : viewParticipant.extra?.[f.key];
+                    {dialogFieldOrder.map((key) => {
+                      const f = getFieldByKey(key);
+                      const val = key === 'name' ? viewParticipant.name
+                        : key === 'clicker_id' ? viewParticipant.clicker_id
+                        : key === 'email_id' ? (viewParticipant.extra?.email_id ?? viewParticipant.email)
+                        : viewParticipant.extra?.[key];
                       return (
-                        <div key={f.key} className="flex justify-between gap-4 border-b pb-2">
+                        <div key={key} className="flex justify-between gap-4 border-b pb-2">
                           <span className="text-muted-foreground">{f.label}</span>
                           <span className="font-medium">{val ?? '—'}</span>
                         </div>
                       );
                     })}
+                    {showOwner && (
+                      <div className="flex justify-between gap-4 border-b pb-2">
+                        <span className="text-muted-foreground">Owner</span>
+                        <span className="font-medium">{viewParticipant.owner_name ?? '—'}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between gap-4 border-b pb-2">
                       <span className="text-muted-foreground">Created</span>
                       <span className="font-medium">{new Date(viewParticipant.created_at).toLocaleString()}</span>
@@ -379,17 +468,20 @@ export function Participants() {
               {editParticipant && (
                 <div className="space-y-4 py-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {PARTICIPANT_FIELDS.map((f) => (
-                      <div key={f.key} className="space-y-2">
-                        <Label htmlFor={`edit-${f.key}`}>{f.label} {f.required ? '*' : ''}</Label>
+                    {dialogFieldOrder.map((key) => {
+                      const f = getFieldByKey(key);
+                      return (
+                      <div key={key} className="space-y-2">
+                        <Label htmlFor={`edit-${key}`}>{f.label} {f.required ? '*' : ''}</Label>
                         <Input
-                          id={`edit-${f.key}`}
-                          type={f.key === 'email_id' ? 'email' : 'text'}
-                          value={editForm[f.key] ?? ''}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                          id={`edit-${key}`}
+                          type={key === 'email_id' || key === 'parent_email_id' ? 'email' : 'text'}
+                          value={editForm[key] ?? ''}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, [key]: e.target.value }))}
                         />
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -406,6 +498,70 @@ export function Participants() {
           </Dialog>
         </div>
       </div>
+
+      {showAdminFilters ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Filter by school & teacher</CardTitle>
+            <CardDescription>
+              Choose a school, then a teacher to narrow the list. School admins see only their school.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-4">
+            <div className="space-y-2 flex-1 min-w-[200px]">
+              <Label>School</Label>
+              <Select
+                value={
+                  user?.role === 'school_admin'
+                    ? filterSchoolId || String(user.school_id ?? '')
+                    : filterSchoolId || ALL_SCHOOLS_VALUE
+                }
+                onValueChange={(v) => {
+                  if (user?.role === 'school_admin') return;
+                  setFilterSchoolId(v === ALL_SCHOOLS_VALUE ? '' : v);
+                  setFilterTeacherId('');
+                }}
+                disabled={user?.role === 'school_admin'}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select school" />
+                </SelectTrigger>
+                <SelectContent>
+                  {user?.role === 'super_admin' ? (
+                    <SelectItem value={ALL_SCHOOLS_VALUE}>All schools</SelectItem>
+                  ) : null}
+                  {schools.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 flex-1 min-w-[200px]">
+              <Label>Teacher</Label>
+              <Select
+                value={filterTeacherId || ALL_TEACHERS_VALUE}
+                onValueChange={(v) => setFilterTeacherId(v === ALL_TEACHERS_VALUE ? '' : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select teacher" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_TEACHERS_VALUE}>All teachers</SelectItem>
+                  {teacherOptions.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {user?.role === 'super_admin' && !filterSchoolId
+                        ? `${t.name} (${t.school_name || '—'})`
+                        : t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -429,7 +585,9 @@ export function Participants() {
               <TableHeader>
                 <TableRow>
                   {tableColumnOrder.map((key) => (
-                    <TableHead key={key}>{getFieldByKey(key).label}</TableHead>
+                    <TableHead key={key}>
+                      {key === '__owner__' ? 'Owner' : getFieldByKey(key).label}
+                    </TableHead>
                   ))}
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right sticky right-0 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.1)] min-w-[120px] z-10">Actions</TableHead>
@@ -439,13 +597,28 @@ export function Participants() {
                 {safeParticipants.map((participant) => (
                   <TableRow key={participant.id}>
                     {tableColumnOrder.map((key) => {
-                      const val = key === 'name' ? participant.name
-                        : key === 'clicker_id' ? participant.clicker_id
-                        : key === 'email_id' ? (participant.extra?.email_id ?? participant.email)
-                        : participant.extra?.[key];
+                      const val =
+                        key === '__owner__'
+                          ? participant.owner_name
+                          : key === 'name'
+                            ? participant.name
+                            : key === 'clicker_id'
+                              ? participant.clicker_id
+                              : key === 'email_id'
+                                ? (participant.extra?.email_id ?? participant.email)
+                                : participant.extra?.[key];
                       return (
-                        <TableCell key={key} className={key === 'clicker_id' ? 'font-medium' : key === 'name' ? 'font-medium' : ''}>
-                          {val ?? <span className="text-muted-foreground">—</span>}
+                        <TableCell
+                          key={key}
+                          className={
+                            key === 'clicker_id' || key === 'name'
+                              ? 'font-medium'
+                              : key === '__owner__'
+                                ? 'text-muted-foreground'
+                                : ''
+                          }
+                        >
+                          {val ? val : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                       );
                     })}

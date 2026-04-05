@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -18,7 +19,7 @@ import {
 import { examService, Exam } from '@/services/exams';
 import { leaderboardService, type Leaderboard as LeaderboardType } from '@/services/leaderboard';
 import { useToast } from '@/components/ui/use-toast';
-import { Trophy, Medal, Award, Loader2 } from 'lucide-react';
+import { Trophy, Medal, Award, Loader2, FileSpreadsheet, FileText } from 'lucide-react';
 
 export function Leaderboard() {
   const [exams, setExams] = useState<Exam[]>([]);
@@ -72,11 +73,40 @@ export function Leaderboard() {
     }
   };
 
-  const getRankIcon = (rank: number) => {
-    if (rank === 1) return <Trophy className="h-6 w-6 text-yellow-500" />;
-    if (rank === 2) return <Medal className="h-6 w-6 text-gray-400" />;
-    if (rank === 3) return <Award className="h-6 w-6 text-amber-600" />;
-    return <span className="text-lg font-bold">#{rank}</span>;
+  const handleDownload = async (format: 'excel' | 'pdf') => {
+    if (!selectedExamId) return;
+    try {
+      const blob = await leaderboardService.exportExamLeaderboard(selectedExamId, format);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ext = format === 'excel' ? 'xlsx' : 'pdf';
+      a.download = `leaderboard-${selectedExamId}.${ext}`;
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.detail || 'Failed to download leaderboard report',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const formatDurationSeconds = (totalSeconds: number) => {
+    const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}m ${sec.toString().padStart(2, '0')}s`;
+  };
+
+  const rankMedal = (rank: number) => {
+    if (rank === 1) return <Trophy className="h-6 w-6 shrink-0 text-yellow-500" aria-hidden />;
+    if (rank === 2) return <Medal className="h-6 w-6 shrink-0 text-gray-400" aria-hidden />;
+    if (rank === 3) return <Award className="h-6 w-6 shrink-0 text-amber-600" aria-hidden />;
+    return null;
   };
 
   if (loading) {
@@ -101,19 +131,42 @@ export function Leaderboard() {
           <CardTitle>Select Exam</CardTitle>
           <CardDescription>Choose an exam to view leaderboard</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-            <SelectTrigger className="w-full max-w-md">
-              <SelectValue placeholder="Select an exam" />
-            </SelectTrigger>
-            <SelectContent>
-              {exams.map((exam) => (
-                <SelectItem key={exam.id} value={exam.id}>
-                  {exam.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2">
+            <Select value={selectedExamId} onValueChange={setSelectedExamId}>
+              <SelectTrigger className="w-full max-w-md">
+                <SelectValue placeholder="Select an exam" />
+              </SelectTrigger>
+              <SelectContent>
+                {exams.map((exam) => (
+                  <SelectItem key={exam.id} value={exam.id}>
+                    {exam.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleDownload('excel')}
+              disabled={!selectedExamId}
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Download Excel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleDownload('pdf')}
+              disabled={!selectedExamId}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Download PDF
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -198,7 +251,8 @@ export function Leaderboard() {
                     <TableRow key={entry.participant_id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          {getRankIcon(entry.rank)}
+                          {rankMedal(entry.rank)}
+                          <span className="text-lg font-bold tabular-nums">#{entry.rank}</span>
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">
@@ -212,7 +266,7 @@ export function Leaderboard() {
                         {entry.percentage.toFixed(1)}%
                       </TableCell>
                       <TableCell>
-                        {Math.floor(entry.time_taken / 60)}m {entry.time_taken % 60}s
+                        {formatDurationSeconds(entry.time_taken)}
                       </TableCell>
                     </TableRow>
                   ))}

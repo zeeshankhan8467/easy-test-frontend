@@ -18,6 +18,8 @@ export const PARTICIPANT_FIELDS = [
   { key: 'employee_code', label: 'Employee Code', required: false },
   { key: 'teacher_name', label: 'Teacher Name', required: false },
   { key: 'email_id', label: 'Email ID', required: false },
+  { key: 'parent_email_id', label: 'Parent Email ID', required: false },
+  { key: 'parent_whatsapp', label: 'Parent WhatsApp Number', required: false },
 ] as const;
 
 export interface Participant {
@@ -28,6 +30,7 @@ export interface Participant {
   exam_id?: string;
   extra?: Record<string, string>;
   created_at: string;
+  owner_name?: string | null;
 }
 
 export interface ParticipantCreate {
@@ -54,9 +57,26 @@ export interface ParticipantImport {
   exam_id?: string;
 }
 
+export interface ParticipantListParams {
+  exam_id?: string;
+  school_id?: number;
+  teacher_id?: number;
+}
+
 export const participantService = {
-  getAll: async (examId?: string): Promise<Participant[]> => {
-    const url = examId ? `/participants/?exam_id=${examId}` : '/participants/';
+  getAll: async (examIdOrParams?: string | ParticipantListParams): Promise<Participant[]> => {
+    let params: ParticipantListParams = {};
+    if (typeof examIdOrParams === 'string') {
+      params = { exam_id: examIdOrParams };
+    } else if (examIdOrParams && typeof examIdOrParams === 'object') {
+      params = examIdOrParams;
+    }
+    const queryParams = new URLSearchParams();
+    if (params.exam_id) queryParams.set('exam_id', params.exam_id);
+    if (params.school_id != null) queryParams.set('school_id', String(params.school_id));
+    if (params.teacher_id != null) queryParams.set('teacher_id', String(params.teacher_id));
+    const qs = queryParams.toString();
+    const url = qs ? `/participants/?${qs}` : '/participants/';
     const response = await api.get<any>(url);
     // Handle DRF pagination response
     if (response.data && Array.isArray(response.data)) {

@@ -13,6 +13,14 @@ export interface QuestionAnalysis {
   option_votes?: number[];
 }
 
+/** Per-question attempt row; response/correct_answer use A,B,C… or 1,2,3… per question option_display. */
+export interface ParticipantQuestionAnswer {
+  question_id: number;
+  response: string;
+  correct_answer: string;
+  is_correct: boolean | null;
+}
+
 export interface ParticipantResult {
   participant_id: string;
   participant_name: string;
@@ -22,7 +30,10 @@ export interface ParticipantResult {
   wrong_answers: number;
   unattempted: number;
   percentage: number;
+  /** Total time (seconds), same basis as leaderboard — sum of per-question times. */
+  time_taken: number;
   rank: number;
+  question_answers?: ParticipantQuestionAnswer[];
 }
 
 export interface ExamReport {
@@ -51,7 +62,34 @@ export interface AttendanceParticipant {
   name: string;
   email: string;
   present: boolean;
+  clicker_id?: string;
+  parent_email_id?: string;
+  parent_whatsapp?: string;
 }
+
+/** Daily attendance roster row (exam-independent). */
+export interface DailyAttendanceParticipant extends AttendanceParticipant {
+  marked: boolean;
+}
+
+export interface DailyAttendanceDay {
+  date: string;
+  participants: DailyAttendanceParticipant[];
+  present_count: number;
+  absent_count: number;
+  unmarked_count: number;
+  total_count: number;
+}
+
+export interface DailyAttendanceSummaryRow {
+  date: string;
+  present_count: number;
+  absent_count: number;
+  unmarked_count: number;
+  total_count: number;
+}
+
+export type AttendanceRowStatus = 'present' | 'absent' | 'unmarked';
 
 export interface ExamAttendance {
   exam_id: number;
@@ -59,6 +97,54 @@ export interface ExamAttendance {
   participants: AttendanceParticipant[];
   present_count: number;
   total_count: number;
+}
+
+export interface SendAttendanceEmailRequest {
+  scope: 'present' | 'absent' | 'all' | 'unmarked';
+  subject: string;
+  body: string;
+  participant_ids?: number[];
+}
+
+export interface SendAttendanceEmailResponse {
+  sent: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface SendAttendanceWhatsAppRequest {
+  scope: 'present' | 'absent' | 'all' | 'unmarked';
+  message: string;
+  participant_ids?: number[];
+}
+
+export interface SendAttendanceWhatsAppResponse {
+  sent: number;
+  skipped: number;
+  errors: string[];
+  messages?: Array<{
+    participant_id: number;
+    student_name: string;
+    phone: string;
+    message_id?: string | number;
+  }>;
+}
+
+export interface StudentPerformanceRow {
+  participant_id: number;
+  admission_no: string;
+  roll_no: string;
+  student_name: string;
+  class_name: string;
+  section: string;
+  teacher_name: string;
+  subject: string;
+  total_percentage: number;
+}
+
+export interface StudentPerformanceResponse {
+  count: number;
+  results: StudentPerformanceRow[];
 }
 
 export const reportService = {
@@ -101,6 +187,131 @@ export const reportService = {
 
   getAttendance: async (examId: string): Promise<ExamAttendance> => {
     const response = await api.get<ExamAttendance>(`/exams/${examId}/attendance/`);
+    return response.data;
+  },
+
+  sendAttendanceParentEmails: async (
+    examId: string,
+    data: SendAttendanceEmailRequest
+  ): Promise<SendAttendanceEmailResponse> => {
+    const response = await api.post<SendAttendanceEmailResponse>(
+      `/exams/${examId}/attendance/send-parent-emails/`,
+      data
+    );
+    return response.data;
+  },
+
+  sendAttendanceParentWhatsApp: async (
+    examId: string,
+    data: SendAttendanceWhatsAppRequest
+  ): Promise<SendAttendanceWhatsAppResponse> => {
+    const response = await api.post<SendAttendanceWhatsAppResponse>(
+      `/exams/${examId}/attendance/send-parent-whatsapp/`,
+      data
+    );
+    return response.data;
+  },
+
+  getStudentPerformanceReport: async (params?: {
+    admission_no?: string;
+    roll_no?: string;
+    student_name?: string;
+    class_name?: string;
+    section?: string;
+    teacher_name?: string;
+    subject?: string;
+    from_date?: string;
+    to_date?: string;
+  }): Promise<StudentPerformanceResponse> => {
+    const response = await api.get<StudentPerformanceResponse>('/reports/student-performance/', { params });
+    return response.data;
+  },
+
+  exportStudentPerformanceReport: async (
+    params?: {
+      admission_no?: string;
+      roll_no?: string;
+      student_name?: string;
+      class_name?: string;
+      section?: string;
+      teacher_name?: string;
+      subject?: string;
+      from_date?: string;
+      to_date?: string;
+      format?: 'excel' | 'csv';
+    }
+  ): Promise<Blob> => {
+    const { format, ...rest } = params || {};
+    const response = await api.get('/reports/student-performance/export/', {
+      params: { ...rest, file_format: format || 'excel' },
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
+
+  exportAttendanceReport: async (
+    examId: string,
+    format: 'excel' | 'pdf'
+  ): Promise<Blob> => {
+    const response = await api.get(`/exams/${examId}/attendance/export/`, {
+      params: { file_format: format },
+      responseType: 'blob',
+    });
+    const blob = response.data as Blob;
+    // If backend returns an error JSON, it may come as blob; caller can still handle via status.
+    return blob;
+  },
+
+  getDailyAttendanceSummary: async (days?: number): Promise<DailyAttendanceSummaryRow[]> => {
+    const response = await api.get<DailyAttendanceSummaryRow[]>('/attendance/summary/', {
+      params: days != null ? { days } : {},
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
+  getDailyAttendanceDay: async (date: string): Promise<DailyAttendanceDay> => {
+    const response = await api.get<DailyAttendanceDay>('/attendance/day/', { params: { date } });
+    return response.data;
+  },
+
+  saveDailyAttendance: async (
+    date: string,
+    entries: Array<{ participant_id: number; status: AttendanceRowStatus }>
+  ): Promise<{ saved: number; errors: string[] }> => {
+    const response = await api.post<{ saved: number; errors: string[] }>('/attendance/day/save/', {
+      date,
+      entries,
+    });
+    return response.data;
+  },
+
+  exportDailyAttendanceReport: async (date: string, format: 'excel' | 'pdf'): Promise<Blob> => {
+    const response = await api.get('/attendance/day/export/', {
+      params: { date, file_format: format },
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
+
+  sendDailyAttendanceParentEmails: async (
+    date: string,
+    data: SendAttendanceEmailRequest
+  ): Promise<SendAttendanceEmailResponse> => {
+    const response = await api.post<SendAttendanceEmailResponse>(
+      '/attendance/day/send-parent-emails/',
+      { date, ...data }
+    );
+    return response.data;
+  },
+
+  sendDailyAttendanceParentWhatsApp: async (
+    date: string,
+    data: SendAttendanceWhatsAppRequest
+  ): Promise<SendAttendanceWhatsAppResponse> => {
+    const response = await api.post<SendAttendanceWhatsAppResponse>(
+      '/attendance/day/send-parent-whatsapp/',
+      { date, ...data }
+    );
     return response.data;
   },
 };

@@ -9,7 +9,7 @@ export function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-background">
       <Sidebar />
       <main className="lg:ml-64 p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto">{children}</div>
+        <div className="">{children}</div>
       </main>
     </div>
   );

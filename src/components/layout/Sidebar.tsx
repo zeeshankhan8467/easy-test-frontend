@@ -5,25 +5,40 @@ import {
   BookOpen,
   Users,
   BarChart3,
+  CalendarCheck,
   Trophy,
   LogOut,
   Menu,
   X,
+  Building2,
+  UserPlus,
+  GraduationCap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { authService } from '@/services/auth';
+import { canManageSchools, canCreateSchoolAdmin, canCreateTeacher } from '@/services/schools';
 import { DarkModeToggle } from './DarkModeToggle';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import { useState } from 'react';
 
-const navigation = [
+const baseNavigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Exams', href: '/exams', icon: FileText },
   { name: 'Question Bank', href: '/questions', icon: BookOpen },
   { name: 'Participants', href: '/participants', icon: Users },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
+  { name: 'Student Performance', href: '/student-performance', icon: BarChart3 },
+  { name: 'Attendance', href: '/attendance', icon: CalendarCheck },
   { name: 'Leaderboard', href: '/leaderboard', icon: Trophy },
 ];
+
+function roleLabel(role: string): string {
+  if (role === 'super_admin') return 'Super Admin';
+  if (role === 'school_admin') return 'School Admin';
+  if (role === 'teacher') return 'Teacher';
+  return role;
+}
 
 export function Sidebar() {
   const location = useLocation();
@@ -34,7 +49,7 @@ export function Sidebar() {
     window.location.href = '/login';
   };
 
-  const user = authService.getCurrentUser();
+  const user = useAuthUser();
 
   return (
     <>
@@ -75,8 +90,8 @@ export function Sidebar() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2">
-            {navigation.map((item) => {
+          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            {baseNavigation.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.href;
               return (
@@ -96,13 +111,58 @@ export function Sidebar() {
                 </Link>
               );
             })}
+            {canManageSchools(user?.role) && (
+              <Link
+                to="/schools"
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                  location.pathname === '/schools'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                )}
+              >
+                <Building2 className="h-5 w-5" />
+                <span className="font-medium">Schools</span>
+              </Link>
+            )}
+            {canCreateSchoolAdmin(user?.role) && (
+              <Link
+                to="/school-admins"
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                  location.pathname.startsWith('/school-admins')
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                )}
+              >
+                <UserPlus className="h-5 w-5" />
+                <span className="font-medium">School Admin</span>
+              </Link>
+            )}
+            {canCreateTeacher(user?.role) && (
+              <Link
+                to="/teachers"
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                  location.pathname.startsWith('/teachers')
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                )}
+              >
+                <GraduationCap className="h-5 w-5" />
+                <span className="font-medium">Teacher</span>
+              </Link>
+            )}
           </nav>
 
           {/* User info and logout */}
           <div className="border-t p-4">
             <div className="mb-3 px-4">
               <p className="text-sm font-medium">{user?.name || user?.email}</p>
-              <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+              <p className="text-xs text-muted-foreground">{user?.role ? roleLabel(user.role) : ''}</p>
             </div>
             <div className="flex items-center gap-2 mb-2">
               <DarkModeToggle />

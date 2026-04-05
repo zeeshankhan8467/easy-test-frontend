@@ -20,22 +20,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getOptionLabel } from '@/lib/optionDisplay';
-import { examService, ExamCreate, ExamQuestionInput } from '@/services/exams';
-import { questionService, Question } from '@/services/questions';
+import { examService, ExamQuestionInput, ExamOwner } from '@/services/exams';
+import { Question } from '@/services/questions';
+import { authService } from '@/services/auth';
+import { schoolService, School } from '@/services/schools';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, ArrowLeft, Plus, X, Eye, ArrowUp, ArrowDown, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
 type Step = 'details' | 'questions' | 'review';
 
 export function ExamForm() {
@@ -52,8 +45,15 @@ export function ExamForm() {
     description: '',
     duration: 60,
     revisable: true,
+    show_live_response: false,
+    show_response_after_completion: true,
+    question_change_automatic: false,
     status: 'draft' as 'draft' | 'frozen' | 'completed',
   });
+  const [ownerUserId, setOwnerUserId] = useState<number | null>(null);
+  const [owners, setOwners] = useState<ExamOwner[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<number | null>(null);
 
   // Question selection
   const [selectedQuestions, setSelectedQuestions] = useState<Array<{
@@ -63,6 +63,10 @@ export function ExamForm() {
     negative_marks: number;
   }>>([]);
 
+  // Bulk mark controls (apply to all selected questions at once)
+  const [bulkPositiveMarks, setBulkPositiveMarks] = useState<number>(1.0);
+  const [bulkNegativeMarks, setBulkNegativeMarks] = useState<number>(0.0);
+
   // Available questions for selection
   const [availableQuestions, setAvailableQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -70,12 +74,28 @@ export function ExamForm() {
   const [filterDifficulty, setFilterDifficulty] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
 
+  const user = authService.getCurrentUser();
+  const canSelectOwner = user?.role === 'super_admin' || user?.role === 'school_admin';
+  const isSuperAdmin = user?.role === 'super_admin';
+
   useEffect(() => {
     if (id) {
       loadExam();
     }
     loadAvailableQuestions();
   }, [id]);
+
+  useEffect(() => {
+    if (canSelectOwner) {
+      examService.getOwners().then(setOwners).catch(() => setOwners([]));
+    }
+  }, [canSelectOwner]);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      schoolService.getAll().then(setSchools).catch(() => setSchools([]));
+    }
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     loadAvailableQuestions();
@@ -89,8 +109,12 @@ export function ExamForm() {
         description: exam.description || '',
         duration: exam.duration,
         revisable: exam.revisable,
+        show_live_response: exam.show_live_response ?? false,
+        show_response_after_completion: exam.show_response_after_completion ?? true,
+        question_change_automatic: exam.question_change_automatic ?? false,
         status: exam.status,
       });
+      setOwnerUserId(exam.owner_id != null ? exam.owner_id : null);
 
       // Load exam questions
       if (exam.questions && exam.questions.length > 0) {
@@ -101,6 +125,8 @@ export function ExamForm() {
           negative_marks: typeof eq.negative_marks === 'number' ? eq.negative_marks : parseFloat(eq.negative_marks) || 0.0,
         }));
         setSelectedQuestions(questions);
+        setBulkPositiveMarks(questions[0]?.positive_marks ?? 1.0);
+        setBulkNegativeMarks(questions[0]?.negative_marks ?? 0.0);
       }
     } catch (error: any) {
       toast({
@@ -153,6 +179,35 @@ export function ExamForm() {
     });
   };
 
+  const addAllAvailableQuestions = () => {
+    if (!availableQuestions.length) return;
+    const existingIds = new Set(selectedQuestions.map((sq) => sq.question.id));
+    const toAdd = availableQuestions.filter((q) => !existingIds.has(q.id));
+    if (!toAdd.length) {
+      toast({ title: 'Nothing to add', description: 'All available questions are already selected.' });
+      return;
+    }
+
+    const startOrder = selectedQuestions.length;
+    const newQuestions = toAdd.map((q, idx) => ({
+      question: q,
+      order: startOrder + idx,
+      positive_marks:
+        typeof q.marks === 'number'
+          ? q.marks
+          : q.marks != null
+            ? parseFloat(String(q.marks)) || 1.0
+            : 1.0,
+      negative_marks: 0.0,
+    }));
+
+    setSelectedQuestions([...selectedQuestions, ...newQuestions]);
+    toast({
+      title: 'Added all',
+      description: `${newQuestions.length} question(s) added to the exam.`,
+    });
+  };
+
   const removeQuestion = (questionId: string) => {
     const updated = selectedQuestions
       .filter((sq) => sq.question.id !== questionId)
@@ -170,6 +225,21 @@ export function ExamForm() {
         return sq;
       })
     );
+  };
+
+  const applyBulkMarksToSelected = () => {
+    if (!selectedQuestions.length) return;
+    setSelectedQuestions((prev) =>
+      prev.map((sq) => ({
+        ...sq,
+        positive_marks: bulkPositiveMarks,
+        negative_marks: bulkNegativeMarks,
+      }))
+    );
+    toast({
+      title: 'Marks applied',
+      description: 'Positive/negative marks applied to all selected questions.',
+    });
   };
 
   const moveQuestion = (questionId: string, direction: 'up' | 'down') => {
@@ -240,6 +310,7 @@ export function ExamForm() {
         await examService.update(id, {
           ...examData,
           questions,
+          ...(canSelectOwner ? { owner_user_id: ownerUserId } : {}),
         });
         toast({
           title: 'Success',
@@ -249,6 +320,7 @@ export function ExamForm() {
         const exam = await examService.create({
           ...examData,
           questions,
+          ...(canSelectOwner ? { owner_user_id: ownerUserId } : {}),
         });
         toast({
           title: 'Success',
@@ -454,8 +526,114 @@ export function ExamForm() {
                           Allow participants to revise answers
                         </Label>
                       </div>
+
+                      <div className="flex items-center space-x-2 pt-3">
+                        <Checkbox
+                          id="show_live_response"
+                          checked={examData.show_live_response}
+                          onCheckedChange={(checked) =>
+                            setExamData({
+                              ...examData,
+                              show_live_response: checked as boolean,
+                            })
+                          }
+                        />
+                        <Label htmlFor="show_live_response" className="cursor-pointer">
+                          Show live response in options (during answering)
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2 pt-3">
+                        <Checkbox
+                          id="show_response_after_completion"
+                          checked={examData.show_response_after_completion}
+                          onCheckedChange={(checked) =>
+                            setExamData({
+                              ...examData,
+                              show_response_after_completion: checked as boolean,
+                            })
+                          }
+                        />
+                        <Label htmlFor="show_response_after_completion" className="cursor-pointer">
+                          Show all responses after exam completion
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2 pt-3">
+                        <Checkbox
+                          id="question_change_automatic"
+                          checked={examData.question_change_automatic}
+                          onCheckedChange={(checked) =>
+                            setExamData({
+                              ...examData,
+                              question_change_automatic: checked as boolean,
+                            })
+                          }
+                        />
+                        <Label htmlFor="question_change_automatic" className="cursor-pointer">
+                          Automatic question change (auto-advance) during live exam
+                        </Label>
+                      </div>
                     </div>
                   </div>
+
+                  {canSelectOwner && owners.length > 0 && (
+                    <div className="space-y-4">
+                      {isSuperAdmin && schools.length > 0 && (
+                        <div className="space-y-2">
+                          <Label>School</Label>
+                          <Select
+                            value={selectedSchoolId != null ? String(selectedSchoolId) : 'all'}
+                            onValueChange={(v) =>
+                              setSelectedSchoolId(v === 'all' ? null : parseInt(v, 10))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="All schools" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All schools</SelectItem>
+                              {schools.map((s) => (
+                                <SelectItem key={s.id} value={String(s.id)}>
+                                  {s.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label>Owner (Teacher)</Label>
+                        <Select
+                          value={ownerUserId != null ? String(ownerUserId) : 'none'}
+                          onValueChange={(v) =>
+                            setOwnerUserId(v === 'none' ? null : parseInt(v, 10))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select teacher (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No specific teacher</SelectItem>
+                            {owners
+                              .filter((o) => (o.role || '').toLowerCase() === 'teacher')
+                              .filter((o) =>
+                                selectedSchoolId != null
+                                  ? Number(o.school_id) === Number(selectedSchoolId)
+                                  : true,
+                              )
+                              .map((o) => (
+                                <SelectItem key={o.id} value={String(o.id)}>
+                                  {o.name || o.email}
+                                  {o.school_name ? ` · ${o.school_name}` : ''}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex gap-4">
                     <Button
@@ -523,7 +701,19 @@ export function ExamForm() {
 
                   {/* Available Questions */}
                   <div className="space-y-2">
-                    <Label>Available Questions ({availableQuestions.length})</Label>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label>Available Questions ({availableQuestions.length})</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addAllAvailableQuestions}
+                        disabled={!availableQuestions.length || availableQuestions.length === selectedQuestions.length}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add All
+                      </Button>
+                    </div>
                     {loadingQuestions ? (
                       <div className="flex items-center justify-center py-8">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -610,6 +800,45 @@ export function ExamForm() {
                     </div>
                   ) : (
                     <div className="space-y-4">
+                      <div className="flex flex-wrap gap-4 items-end">
+                        <div className="space-y-2">
+                          <Label>Positive marks (all)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={bulkPositiveMarks}
+                            onChange={(e) =>
+                              setBulkPositiveMarks(parseFloat(e.target.value) || 0)
+                            }
+                            className="w-36"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Negative marks (all)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={bulkNegativeMarks}
+                            onChange={(e) =>
+                              setBulkNegativeMarks(parseFloat(e.target.value) || 0)
+                            }
+                            className="w-36"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={applyBulkMarksToSelected}
+                          disabled={selectedQuestions.length === 0}
+                        >
+                          Apply marks to all
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        This overwrites marks for every selected question.
+                      </p>
+
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -753,6 +982,28 @@ export function ExamForm() {
                             {examData.revisable ? 'Revisable' : 'Non-Revisable'}
                           </span>
                         </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Live Response:</span>
+                          <span className="font-medium">
+                            {examData.show_live_response ? 'Show' : 'Hide'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            After Completion Options:
+                          </span>
+                          <span className="font-medium">
+                            {examData.show_response_after_completion ? 'Show all' : 'Hide'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            Question Change:
+                          </span>
+                          <span className="font-medium">
+                            {examData.question_change_automatic ? 'Automatic' : 'Manual'}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -780,7 +1031,7 @@ export function ExamForm() {
                                   </span>
                                 </div>
                                 <div
-                                  className="prose prose-sm max-w-none text-sm"
+                                  className="prose prose-sm max-w-none text-sm [&_.video-embed-wrapper]:my-2 [&_img]:max-h-40 [&_img]:rounded"
                                   dangerouslySetInnerHTML={{ __html: sq.question.text }}
                                 />
                               </div>
@@ -853,7 +1104,7 @@ export function ExamForm() {
               <div>
                 <Label>Question</Label>
                 <div
-                  className="mt-1 prose prose-sm max-w-none"
+                  className="mt-1 prose prose-sm max-w-none [&_.video-embed-wrapper]:my-2 [&_img]:max-h-64 [&_img]:rounded"
                   dangerouslySetInnerHTML={{ __html: previewQuestion.text }}
                 />
               </div>

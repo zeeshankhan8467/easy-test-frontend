@@ -24,6 +24,17 @@ export const leaderboardService = {
     return response.data;
   },
 
+  exportExamLeaderboard: async (
+    examId: string,
+    format: 'excel' | 'pdf'
+  ): Promise<Blob> => {
+    const response = await api.get(`/leaderboard/exams/${examId}/export/`, {
+      params: { file_format: format },
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
+
   getHistoricalComparison: async (examIds: string[]): Promise<Leaderboard[]> => {
     const response = await api.post<Leaderboard[]>('/leaderboard/compare/', {
       exam_ids: examIds,
