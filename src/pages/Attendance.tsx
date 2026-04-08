@@ -77,9 +77,6 @@ export function Attendance() {
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
   const [whatsAppScope, setWhatsAppScope] = useState<EmailScope>('absent');
-  const [whatsAppMessage, setWhatsAppMessage] = useState(
-    'Dear Parent/Guardian,\n\nAttendance update for {{attendance_date}}\nStudent: {{student_name}}\nKeypad ID: {{clicker_id}}\nStatus: {{status}}'
-  );
   const [whatsAppSearch, setWhatsAppSearch] = useState('');
   const [selectedWhatsAppStudentIds, setSelectedWhatsAppStudentIds] = useState<Set<number>>(new Set());
   const [studentSearch, setStudentSearch] = useState('');
@@ -215,6 +212,23 @@ export function Attendance() {
     return searched;
   }, [participantsView, whatsAppScope, whatsAppSearch]);
 
+  const whatsAppPreview = useMemo(() => {
+    const fallbackDate = selectedDate || localISODate();
+    const selected = whatsAppCandidates.find((p) => selectedWhatsAppStudentIds.has(Number(p.id)));
+    const p = selected ?? whatsAppCandidates[0];
+    const studentName = p?.name || 'Student Name';
+    const keypad = p?.clicker_id || 'N/A';
+    const status = p ? statusLabel(p) : 'Absent';
+    return (
+      `Dear Parent/Guardian,\n\n` +
+      `Attendance update for ${fallbackDate}\n` +
+      `Student: ${studentName}\n` +
+      `Keypad ID: ${keypad}\n` +
+      `Status: ${status}\n` +
+      `THANKYOU`
+    );
+  }, [selectedDate, whatsAppCandidates, selectedWhatsAppStudentIds, statusLabel]);
+
   const openWhatsAppDialog = () => {
     const ps = participantsView;
     const scoped =
@@ -301,7 +315,7 @@ export function Attendance() {
     try {
       const result = await reportService.sendDailyAttendanceParentWhatsApp(selectedDate, {
         scope: whatsAppScope,
-        message: whatsAppMessage,
+        message: '{{attendance_date}}',
         participant_ids: ids,
       });
       toast({
@@ -642,8 +656,10 @@ export function Attendance() {
           <DialogHeader>
             <DialogTitle>Send attendance on WhatsApp</DialogTitle>
             <DialogDescription>
-              Uses attendance from the app for this day. Placeholders:{' '}
-              <code>{'{{attendance_date}}'}</code>, <code>{'{{student_name}}'}</code>, etc.
+              Uses attendance from the app for this day. If MSG91 template mode is enabled, the backend fills:
+              <code className="ml-1">{'body_1'}</code>=message/date, <code className="ml-1">{'body_2'}</code>=student,
+              <code className="ml-1">{'body_3'}</code>=keypad, <code className="ml-1">{'body_4'}</code>=status.
+              Recommended message: <code className="ml-1">{'{{attendance_date}}'}</code>
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -663,13 +679,10 @@ export function Attendance() {
             </div>
 
             <div className="space-y-2">
-              <Label>Message</Label>
-              <Textarea
-                rows={6}
-                value={whatsAppMessage}
-                onChange={(e) => setWhatsAppMessage(e.target.value)}
-                placeholder="Use {{attendance_date}}, {{student_name}}, {{clicker_id}}, {{status}}"
-              />
+              <Label>Message parents will receive</Label>
+              <pre className="rounded-md border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
+                {whatsAppPreview}
+              </pre>
             </div>
 
             <div className="space-y-2">

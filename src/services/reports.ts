@@ -122,11 +122,11 @@ export interface SendAttendanceWhatsAppResponse {
   sent: number;
   skipped: number;
   errors: string[];
-  messages?: Array<{
+  messages: Array<{
     participant_id: number;
     student_name: string;
     phone: string;
-    message_id?: string | number;
+    message_id?: string | null;
   }>;
 }
 
