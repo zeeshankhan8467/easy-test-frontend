@@ -85,9 +85,6 @@ export function Participants() {
   const [classOptions, setClassOptions] = useState<string[]>([]);
   const [sectionOptions, setSectionOptions] = useState<string[]>([]);
   const [teamOptions, setTeamOptions] = useState<string[]>([]);
-  const [importDefaultClass, setImportDefaultClass] = useState('');
-  const [importDefaultSection, setImportDefaultSection] = useState('');
-  const [importDefaultTeam, setImportDefaultTeam] = useState('');
 
   const [createForm, setCreateForm] = useState<ParticipantRow>(() => buildEmptyRow());
 
@@ -247,9 +244,6 @@ export function Participants() {
     try {
       const result = await participantService.import({
         file: selectedFile,
-        ...(importDefaultClass.trim() ? { default_class: importDefaultClass.trim() } : {}),
-        ...(importDefaultSection.trim() ? { default_section: importDefaultSection.trim() } : {}),
-        ...(importDefaultTeam.trim() ? { default_team: importDefaultTeam.trim() } : {}),
       });
       toast({
         title: 'Success',
@@ -264,9 +258,6 @@ export function Participants() {
       }
       setImportDialogOpen(false);
       setSelectedFile(null);
-      setImportDefaultClass('');
-      setImportDefaultSection('');
-      setImportDefaultTeam('');
       loadParticipants();
       loadRosterFilterOptions();
     } catch (error: any) {
@@ -446,9 +437,6 @@ export function Participants() {
             setImportDialogOpen(open);
             if (!open) {
               setSelectedFile(null);
-              setImportDefaultClass('');
-              setImportDefaultSection('');
-              setImportDefaultTeam('');
             }
           }}>
             <DialogTrigger asChild>
@@ -461,7 +449,7 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Import Participants</DialogTitle>
                 <DialogDescription>
-                  Upload CSV or Excel with a <strong>Keypad ID</strong> column (or &quot;clicker id&quot;) — required. <strong>Name</strong> is optional; if missing or blank, the keypad ID is stored as the display name. Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;), <strong>Parent WhatsApp Number</strong> (or &quot;parent phone&quot; / &quot;parent mobile&quot; / &quot;whatsapp&quot;). Use <strong>Default class</strong>, <strong>Default section</strong>, and <strong>Default team</strong> to fill rows that omit those columns or leave them blank.
+                  Upload CSV or Excel with a <strong>Keypad ID</strong> column (or &quot;clicker id&quot;) — required. <strong>Name</strong> is optional; if missing or blank, the keypad ID is stored as the display name. Optional columns: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;), <strong>Parent WhatsApp Number</strong> (or &quot;parent phone&quot; / &quot;parent mobile&quot; / &quot;whatsapp&quot;).
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -470,59 +458,6 @@ export function Participants() {
                     <Download className="h-4 w-4 mr-2" />
                     Download sample CSV
                   </Button>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="import-default-class">Default class (optional)</Label>
-                  <Select
-                    value={importDefaultClass || NONE_VALUE}
-                    onValueChange={(v) => setImportDefaultClass(v === NONE_VALUE ? '' : v)}
-                  >
-                    <SelectTrigger id="import-default-class">
-                      <SelectValue placeholder="No default" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE_VALUE}>No default</SelectItem>
-                      {(importDefaultClass && !CLASS_CHOICES.includes(importDefaultClass)
-                        ? [importDefaultClass, ...CLASS_CHOICES]
-                        : CLASS_CHOICES
-                      ).map((opt) => (
-                        <SelectItem key={opt} value={opt}>
-                          {opt}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="import-default-section">Default section (optional)</Label>
-                  <Select
-                    value={importDefaultSection || NONE_VALUE}
-                    onValueChange={(v) => setImportDefaultSection(v === NONE_VALUE ? '' : v)}
-                  >
-                    <SelectTrigger id="import-default-section">
-                      <SelectValue placeholder="No default" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE_VALUE}>No default</SelectItem>
-                      {(importDefaultSection && !SECTION_CHOICES.includes(importDefaultSection)
-                        ? [importDefaultSection, ...SECTION_CHOICES]
-                        : SECTION_CHOICES
-                      ).map((opt) => (
-                        <SelectItem key={opt} value={opt}>
-                          {opt}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="import-default-team">Default team (optional)</Label>
-                  <Input
-                    id="import-default-team"
-                    placeholder="e.g. Red — applied when Team column is missing or empty"
-                    value={importDefaultTeam}
-                    onChange={(e) => setImportDefaultTeam(e.target.value)}
-                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="file">File</Label>
