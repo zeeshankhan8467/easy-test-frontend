@@ -121,5 +121,18 @@ export const questionService = {
     );
     return response.data;
   },
+
+  /** Permanently delete all questions in the same scope as GET (optional school_id / teacher_id). */
+  deleteAll: async (params?: QuestionListParams): Promise<{ deleted: number }> => {
+    const queryParams: Record<string, string> = {};
+    if (params?.school_id != null) queryParams.school_id = String(params.school_id);
+    if (params?.teacher_id != null) queryParams.teacher_id = String(params.teacher_id);
+    const response = await api.post<{ deleted: number }>(
+      '/questions/delete_all/',
+      { confirm: true },
+      { params: queryParams }
+    );
+    return response.data;
+  },
 };
 

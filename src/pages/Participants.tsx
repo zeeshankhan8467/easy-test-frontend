@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -20,11 +20,12 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { participantService, Participant, ParticipantRow, PARTICIPANT_FIELDS } from '@/services/participants';
+import { participantService, Participant, ParticipantRow, PARTICIPANT_FIELDS, ParticipantListParams } from '@/services/participants';
+import { downloadParticipantImportSample } from '@/lib/sampleImportSheets';
 import { schoolService, School } from '@/services/schools';
 import { examService, ExamOwner } from '@/services/exams';
 import { useToast } from '@/components/ui/use-toast';
-import { Upload, Plus, Loader2, Trash2, Edit, Eye } from 'lucide-react';
+import { Upload, Plus, Loader2, Trash2, Edit, Eye, Download } from 'lucide-react';
 import { authService } from '@/services/auth';
 import {
   Select,
@@ -36,6 +37,7 @@ import {
 
 const ALL_SCHOOLS_VALUE = '__all_schools__';
 const ALL_TEACHERS_VALUE = '__all_teachers__';
+const ALL_CLASSES_VALUE = '__all_classes__';
 
 function buildEmptyRow(): ParticipantRow {
   const row: ParticipantRow = { name: '', clicker_id: '' };
@@ -50,6 +52,8 @@ export function Participants() {
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [deleteAllBusy, setDeleteAllBusy] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -70,6 +74,9 @@ export function Participants() {
     user?.role === 'school_admin' && user.school_id != null ? String(user.school_id) : ''
   );
   const [filterTeacherId, setFilterTeacherId] = useState<string>('');
+  const [filterClass, setFilterClass] = useState<string>('');
+  const [classOptions, setClassOptions] = useState<string[]>([]);
+  const [importDefaultClass, setImportDefaultClass] = useState('');
 
   const [createForm, setCreateForm] = useState<ParticipantRow>(() => buildEmptyRow());
 
@@ -111,19 +118,35 @@ export function Participants() {
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   }, [examOwners, filterSchoolId]);
 
+  const rosterListParams = useMemo((): ParticipantListParams => {
+    const p: ParticipantListParams = {};
+    if (showAdminFilters && filterSchoolId) p.school_id = Number(filterSchoolId);
+    if (showAdminFilters && filterTeacherId) p.teacher_id = Number(filterTeacherId);
+    if (filterClass) p.class = filterClass;
+    return p;
+  }, [showAdminFilters, filterSchoolId, filterTeacherId, filterClass]);
+
+  const loadClassOptions = useCallback(async () => {
+    try {
+      const p: ParticipantListParams = {};
+      if (showAdminFilters && filterSchoolId) p.school_id = Number(filterSchoolId);
+      if (showAdminFilters && filterTeacherId) p.teacher_id = Number(filterTeacherId);
+      const classes = await participantService.getDistinctClasses(
+        Object.keys(p).length ? p : undefined
+      );
+      setClassOptions(classes);
+      setFilterClass((prev) => (prev && !classes.includes(prev) ? '' : prev));
+    } catch (e) {
+      console.error(e);
+      setClassOptions([]);
+    }
+  }, [showAdminFilters, filterSchoolId, filterTeacherId]);
+
   const loadParticipants = useCallback(async () => {
     setLoading(true);
     try {
-      const listParams =
-        showAdminFilters && (filterSchoolId || filterTeacherId)
-          ? {
-              ...(filterSchoolId ? { school_id: Number(filterSchoolId) } : {}),
-              ...(filterTeacherId ? { teacher_id: Number(filterTeacherId) } : {}),
-            }
-          : undefined;
-      const data = await participantService.getAll(
-        listParams && Object.keys(listParams).length ? listParams : undefined
-      );
+      const hasParams = Object.keys(rosterListParams).length > 0;
+      const data = await participantService.getAll(hasParams ? rosterListParams : undefined);
       setParticipants(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error('Failed to load participants:', error);
@@ -136,11 +159,15 @@ export function Participants() {
     } finally {
       setLoading(false);
     }
-  }, [showAdminFilters, filterSchoolId, filterTeacherId, toast]);
+  }, [rosterListParams, toast]);
 
   useEffect(() => {
     loadParticipants();
   }, [loadParticipants]);
+
+  useEffect(() => {
+    loadClassOptions();
+  }, [loadClassOptions]);
 
   const updateCreateForm = (field: string, value: string) => {
     setCreateForm((prev) => ({ ...prev, [field]: value }));
@@ -149,8 +176,8 @@ export function Participants() {
   const handleCreate = async () => {
     const name = createForm.name.trim();
     const clicker_id = createForm.clicker_id.trim();
-    if (!name || !clicker_id) {
-      toast({ title: 'Validation', description: 'Name and Keypad ID are required.', variant: 'destructive' });
+    if (!clicker_id) {
+      toast({ title: 'Validation', description: 'Keypad ID is required.', variant: 'destructive' });
       return;
     }
     const rest: Record<string, string> = {};
@@ -162,7 +189,7 @@ export function Participants() {
     });
     const emailVal = rest.email_id;
     if (emailVal) delete rest.email_id;
-    const payload: ParticipantRow = { name, clicker_id, ...rest };
+    const payload: ParticipantRow = { clicker_id, ...(name ? { name } : {}), ...rest };
     if (emailVal) payload.email = emailVal;
     setCreating(true);
     try {
@@ -177,6 +204,7 @@ export function Participants() {
       setCreateDialogOpen(false);
       setCreateForm(buildEmptyRow());
       loadParticipants();
+      loadClassOptions();
     } catch (error: any) {
       const data = error.response?.data;
       const msg = data?.participants?.[0] || data?.clicker_id?.[0] || data?.detail || 'Failed to create participant';
@@ -189,7 +217,10 @@ export function Participants() {
   const handleImport = async () => {
     if (!selectedFile) return;
     try {
-      const result = await participantService.import({ file: selectedFile });
+      const result = await participantService.import({
+        file: selectedFile,
+        ...(importDefaultClass.trim() ? { default_class: importDefaultClass.trim() } : {}),
+      });
       toast({
         title: 'Success',
         description: `Imported ${result.imported} participants`,
@@ -203,13 +234,42 @@ export function Participants() {
       }
       setImportDialogOpen(false);
       setSelectedFile(null);
+      setImportDefaultClass('');
       loadParticipants();
+      loadClassOptions();
     } catch (error: any) {
       toast({
         title: 'Error',
         description: 'Failed to import participants',
         variant: 'destructive',
       });
+    }
+  };
+
+  const getParticipantListParams = (): ParticipantListParams | undefined => {
+    const hasParams = Object.keys(rosterListParams).length > 0;
+    return hasParams ? rosterListParams : undefined;
+  };
+
+  const handleDeleteAllParticipants = async () => {
+    setDeleteAllBusy(true);
+    try {
+      const { deleted } = await participantService.deleteAll(getParticipantListParams());
+      toast({
+        title: 'Participants deleted',
+        description: `Removed ${deleted} participant(s). Related exam assignments, attempts, and daily attendance rows are removed.`,
+      });
+      setDeleteAllDialogOpen(false);
+      await loadParticipants();
+      loadClassOptions();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.error || error?.response?.data?.detail || 'Failed to delete participants',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteAllBusy(false);
     }
   };
 
@@ -220,6 +280,7 @@ export function Participants() {
       setViewDialogOpen(false);
       setEditDialogOpen(false);
       loadParticipants();
+      loadClassOptions();
     } catch (error: any) {
       toast({ title: 'Error', description: 'Failed to delete participant', variant: 'destructive' });
     }
@@ -235,9 +296,11 @@ export function Participants() {
     'name',
     'roll_no',
     'admission_no',
+    'class',
     'parent_email_id',
     ...PARTICIPANT_FIELDS.map((f) => f.key).filter(
-      (k) => !['clicker_id', 'name', 'roll_no', 'admission_no', 'parent_email_id'].includes(k)
+      (k) =>
+        !['clicker_id', 'name', 'roll_no', 'admission_no', 'class', 'parent_email_id'].includes(k)
     ),
   ];
 
@@ -258,8 +321,8 @@ export function Participants() {
     if (!editParticipant) return;
     const name = (editForm.name ?? '').trim();
     const clicker_id = (editForm.clicker_id ?? '').trim();
-    if (!name || !clicker_id) {
-      toast({ title: 'Validation', description: 'Name and Keypad ID are required.', variant: 'destructive' });
+    if (!clicker_id) {
+      toast({ title: 'Validation', description: 'Keypad ID is required.', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -282,6 +345,7 @@ export function Participants() {
       setEditDialogOpen(false);
       setEditParticipant(null);
       loadParticipants();
+      loadClassOptions();
     } catch (error: any) {
       const msg = error.response?.data?.clicker_id?.[0] ?? error.response?.data?.detail ?? 'Failed to update participant';
       toast({ title: 'Error', description: typeof msg === 'string' ? msg : 'Failed to update participant', variant: 'destructive' });
@@ -296,17 +360,37 @@ export function Participants() {
     'name',
     'roll_no',
     'admission_no',
+    'class',
     ...(showOwner ? (['__owner__'] as const) : []),
     'parent_email_id',
     ...PARTICIPANT_FIELDS.map((f) => f.key).filter(
       (k) =>
-        !['clicker_id', 'name', 'roll_no', 'admission_no', 'parent_email_id'].includes(k)
+        !['clicker_id', 'name', 'roll_no', 'admission_no', 'class', 'parent_email_id'].includes(k)
     ),
   ] as string[];
   const getFieldByKey = (key: string) => PARTICIPANT_FIELDS.find((f) => f.key === key)!;
 
   // Ensure participants is always an array
   const safeParticipants = Array.isArray(participants) ? participants : [];
+
+  const participantsGroupedByClass = useMemo(() => {
+    const map = new Map<string, Participant[]>();
+    for (const p of safeParticipants) {
+      const raw = (p.extra?.class ?? '').toString().trim();
+      const gkey = raw;
+      if (!map.has(gkey)) map.set(gkey, []);
+      map.get(gkey)!.push(p);
+    }
+    const keys = Array.from(map.keys()).sort((a, b) => {
+      if (a === '') return 1;
+      if (b === '') return -1;
+      return a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+    });
+    return keys.map((k) => ({
+      sectionLabel: k === '' ? 'No class' : k,
+      items: map.get(k)!,
+    }));
+  }, [safeParticipants]);
 
   if (loading) {
     return (
@@ -326,7 +410,13 @@ export function Participants() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+          <Dialog open={importDialogOpen} onOpenChange={(open) => {
+            setImportDialogOpen(open);
+            if (!open) {
+              setSelectedFile(null);
+              setImportDefaultClass('');
+            }
+          }}>
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Upload className="h-4 w-4 mr-2" />
@@ -337,10 +427,25 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Import Participants</DialogTitle>
                 <DialogDescription>
-                  Upload CSV or Excel with columns: <strong>Name</strong>, <strong>Keypad ID</strong> (or &quot;keypad id&quot;) (required). Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;), <strong>Parent WhatsApp Number</strong> (or &quot;parent phone&quot; / &quot;parent mobile&quot; / &quot;whatsapp&quot;).
+                  Upload CSV or Excel with a <strong>Keypad ID</strong> column (or &quot;clicker id&quot;) — required. <strong>Name</strong> is optional; if missing or blank, the keypad ID is stored as the display name. Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;), <strong>Parent WhatsApp Number</strong> (or &quot;parent phone&quot; / &quot;parent mobile&quot; / &quot;whatsapp&quot;). Use <strong>Default class</strong> to assign one class to every row that has no Class column or an empty class (class-wise roster).
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" size="sm" onClick={downloadParticipantImportSample}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download sample CSV
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="import-default-class">Default class (optional)</Label>
+                  <Input
+                    id="import-default-class"
+                    placeholder="e.g. 10-A — applied when Class column is missing or empty"
+                    value={importDefaultClass}
+                    onChange={(e) => setImportDefaultClass(e.target.value)}
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="file">File</Label>
                   <Input
@@ -366,6 +471,15 @@ export function Participants() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={safeParticipants.length === 0}
+            onClick={() => setDeleteAllDialogOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete all
+          </Button>
           <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (open) setCreateForm(buildEmptyRow()); }}>
             <DialogTrigger asChild>
               <Button>
@@ -377,7 +491,7 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Add Participant</DialogTitle>
                 <DialogDescription>
-                  Name and Keypad ID are required. All other fields are optional.
+                  Keypad ID is required. Name is optional (if empty, it defaults to the keypad ID). Set <strong>Class</strong> to group students and filter the roster; other fields are optional.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-4">
@@ -499,75 +613,99 @@ export function Participants() {
         </div>
       </div>
 
-      {showAdminFilters ? (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Filter by school & teacher</CardTitle>
-            <CardDescription>
-              Choose a school, then a teacher to narrow the list. School admins see only their school.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row gap-4">
-            <div className="space-y-2 flex-1 min-w-[200px]">
-              <Label>School</Label>
-              <Select
-                value={
-                  user?.role === 'school_admin'
-                    ? filterSchoolId || String(user.school_id ?? '')
-                    : filterSchoolId || ALL_SCHOOLS_VALUE
-                }
-                onValueChange={(v) => {
-                  if (user?.role === 'school_admin') return;
-                  setFilterSchoolId(v === ALL_SCHOOLS_VALUE ? '' : v);
-                  setFilterTeacherId('');
-                }}
-                disabled={user?.role === 'school_admin'}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select school" />
-                </SelectTrigger>
-                <SelectContent>
-                  {user?.role === 'super_admin' ? (
-                    <SelectItem value={ALL_SCHOOLS_VALUE}>All schools</SelectItem>
-                  ) : null}
-                  {schools.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 flex-1 min-w-[200px]">
-              <Label>Teacher</Label>
-              <Select
-                value={filterTeacherId || ALL_TEACHERS_VALUE}
-                onValueChange={(v) => setFilterTeacherId(v === ALL_TEACHERS_VALUE ? '' : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select teacher" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_TEACHERS_VALUE}>All teachers</SelectItem>
-                  {teacherOptions.map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>
-                      {user?.role === 'super_admin' && !filterSchoolId
-                        ? `${t.name} (${t.school_name || '—'})`
-                        : t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Filter roster</CardTitle>
+          <CardDescription>
+            {showAdminFilters
+              ? 'Choose school and teacher (if applicable), then class. Class values come from each participant\'s Class field.'
+              : 'Filter your roster by class. Set Class when adding or editing a participant, or when importing.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col lg:flex-row gap-4 flex-wrap">
+          {showAdminFilters ? (
+            <>
+              <div className="space-y-2 flex-1 min-w-[200px]">
+                <Label>School</Label>
+                <Select
+                  value={
+                    user?.role === 'school_admin'
+                      ? filterSchoolId || String(user.school_id ?? '')
+                      : filterSchoolId || ALL_SCHOOLS_VALUE
+                  }
+                  onValueChange={(v) => {
+                    if (user?.role === 'school_admin') return;
+                    setFilterSchoolId(v === ALL_SCHOOLS_VALUE ? '' : v);
+                    setFilterTeacherId('');
+                  }}
+                  disabled={user?.role === 'school_admin'}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select school" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {user?.role === 'super_admin' ? (
+                      <SelectItem value={ALL_SCHOOLS_VALUE}>All schools</SelectItem>
+                    ) : null}
+                    {schools.map((s) => (
+                      <SelectItem key={s.id} value={String(s.id)}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 flex-1 min-w-[200px]">
+                <Label>Teacher</Label>
+                <Select
+                  value={filterTeacherId || ALL_TEACHERS_VALUE}
+                  onValueChange={(v) => setFilterTeacherId(v === ALL_TEACHERS_VALUE ? '' : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select teacher" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_TEACHERS_VALUE}>All teachers</SelectItem>
+                    {teacherOptions.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>
+                        {user?.role === 'super_admin' && !filterSchoolId
+                          ? `${t.name} (${t.school_name || '—'})`
+                          : t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : null}
+          <div className="space-y-2 flex-1 min-w-[180px]">
+            <Label>Class</Label>
+            <Select
+              value={filterClass || ALL_CLASSES_VALUE}
+              onValueChange={(v) => setFilterClass(v === ALL_CLASSES_VALUE ? '' : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All classes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_CLASSES_VALUE}>All classes</SelectItem>
+                {classOptions.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>All Participants</CardTitle>
           <CardDescription>
-            {safeParticipants.length} participant(s) registered
+            {safeParticipants.length} participant(s)
+            {filterClass ? ` in class "${filterClass}"` : ''} — grouped by class when showing all classes
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -594,49 +732,63 @@ export function Participants() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {safeParticipants.map((participant) => (
-                  <TableRow key={participant.id}>
-                    {tableColumnOrder.map((key) => {
-                      const val =
-                        key === '__owner__'
-                          ? participant.owner_name
-                          : key === 'name'
-                            ? participant.name
-                            : key === 'clicker_id'
-                              ? participant.clicker_id
-                              : key === 'email_id'
-                                ? (participant.extra?.email_id ?? participant.email)
-                                : participant.extra?.[key];
-                      return (
+                {participantsGroupedByClass.map(({ sectionLabel, items }) => (
+                  <Fragment key={sectionLabel}>
+                    {!filterClass ? (
+                      <TableRow className="bg-muted/60 hover:bg-muted/60">
                         <TableCell
-                          key={key}
-                          className={
-                            key === 'clicker_id' || key === 'name'
-                              ? 'font-medium'
-                              : key === '__owner__'
-                                ? 'text-muted-foreground'
-                                : ''
-                          }
+                          colSpan={tableColumnOrder.length + 2}
+                          className="font-semibold text-sm py-2"
                         >
-                          {val ? val : <span className="text-muted-foreground">—</span>}
+                          Class: {sectionLabel} ({items.length})
                         </TableCell>
-                      );
-                    })}
-                    <TableCell>{new Date(participant.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right sticky right-0 bg-background shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)] z-10">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => openView(participant)} title="View">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(participant)} title="Edit">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(participant.id)} title="Delete">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                      </TableRow>
+                    ) : null}
+                    {items.map((participant) => (
+                      <TableRow key={participant.id}>
+                        {tableColumnOrder.map((key) => {
+                          const val =
+                            key === '__owner__'
+                              ? participant.owner_name
+                              : key === 'name'
+                                ? participant.name
+                                : key === 'clicker_id'
+                                  ? participant.clicker_id
+                                  : key === 'email_id'
+                                    ? (participant.extra?.email_id ?? participant.email)
+                                    : participant.extra?.[key];
+                          return (
+                            <TableCell
+                              key={key}
+                              className={
+                                key === 'clicker_id' || key === 'name'
+                                  ? 'font-medium'
+                                  : key === '__owner__'
+                                    ? 'text-muted-foreground'
+                                    : ''
+                              }
+                            >
+                              {val ? val : <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell>{new Date(participant.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right sticky right-0 bg-background shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)] z-10">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => openView(participant)} title="View">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(participant)} title="Edit">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(participant.id)} title="Delete">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -644,6 +796,28 @@ export function Participants() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={deleteAllDialogOpen} onOpenChange={setDeleteAllDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete all participants?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes every participant in your current list ({safeParticipants.length} shown). School
+              and teacher filters apply when you use them. This also removes exam assignments, attempts, answers, and
+              daily attendance for those participants.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setDeleteAllDialogOpen(false)} disabled={deleteAllBusy}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDeleteAllParticipants} disabled={deleteAllBusy}>
+              {deleteAllBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Delete all
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

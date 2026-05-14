@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -127,6 +127,11 @@ export function Reports() {
       });
     }
   };
+
+  const participantResultsByRank = useMemo(() => {
+    if (!report?.participant_results?.length) return [];
+    return [...report.participant_results].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+  }, [report?.participant_results]);
 
   if (loading) {
     return (
@@ -425,7 +430,7 @@ export function Reports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {report.participant_results.map((result) => (
+                      {participantResultsByRank.map((result) => (
                         <TableRow key={result.participant_id}>
                           <TableCell className="font-bold">
                             #{result.rank}

@@ -61,6 +61,7 @@ export function ExamForm() {
     order: number;
     positive_marks: number;
     negative_marks: number;
+    allow_revise: boolean;
   }>>([]);
 
   // Bulk mark controls (apply to all selected questions at once)
@@ -73,6 +74,8 @@ export function ExamForm() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
+  const [filterTag, setFilterTag] = useState<string>('all');
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
 
   const user = authService.getCurrentUser();
   const canSelectOwner = user?.role === 'super_admin' || user?.role === 'school_admin';
@@ -99,7 +102,7 @@ export function ExamForm() {
 
   useEffect(() => {
     loadAvailableQuestions();
-  }, [searchQuery, filterDifficulty, filterType, id]);
+  }, [searchQuery, filterDifficulty, filterType, filterTag, id]);
 
   const loadExam = async () => {
     try {
@@ -123,6 +126,7 @@ export function ExamForm() {
           order: eq.order || 0,
           positive_marks: typeof eq.positive_marks === 'number' ? eq.positive_marks : parseFloat(eq.positive_marks) || 1.0,
           negative_marks: typeof eq.negative_marks === 'number' ? eq.negative_marks : parseFloat(eq.negative_marks) || 0.0,
+          allow_revise: typeof eq.allow_revise === 'boolean' ? eq.allow_revise : true,
         }));
         setSelectedQuestions(questions);
         setBulkPositiveMarks(questions[0]?.positive_marks ?? 1.0);
@@ -140,13 +144,16 @@ export function ExamForm() {
   const loadAvailableQuestions = async () => {
     setLoadingQuestions(true);
     try {
-      const questions = await examService.getAvailableQuestions({
+      const { questions, tags } = await examService.getAvailableQuestions({
         exam_id: id,
         difficulty: filterDifficulty !== 'all' ? filterDifficulty : undefined,
         type: filterType !== 'all' ? filterType : undefined,
-        search: searchQuery,
+        search: searchQuery || undefined,
+        tag: filterTag !== 'all' ? filterTag : undefined,
       });
       setAvailableQuestions(questions);
+      setTagOptions(tags);
+      setFilterTag((prev) => (prev !== 'all' && !tags.includes(prev) ? 'all' : prev));
     } catch (error: any) {
       console.error('Failed to load questions:', error);
     } finally {
@@ -170,6 +177,7 @@ export function ExamForm() {
       order: selectedQuestions.length,
       positive_marks: typeof question.marks === 'number' ? question.marks : (question.marks != null ? parseFloat(String(question.marks)) : 0) || 1.0,
       negative_marks: 0.0,
+      allow_revise: true,
     };
 
     setSelectedQuestions([...selectedQuestions, newQuestion]);
@@ -199,6 +207,7 @@ export function ExamForm() {
             ? parseFloat(String(q.marks)) || 1.0
             : 1.0,
       negative_marks: 0.0,
+      allow_revise: true,
     }));
 
     setSelectedQuestions([...selectedQuestions, ...newQuestions]);
@@ -304,6 +313,7 @@ export function ExamForm() {
         positive_marks: sq.positive_marks,
         negative_marks: sq.negative_marks,
         is_optional: false,
+        allow_revise: sq.allow_revise,
       }));
 
       if (id) {
@@ -368,6 +378,7 @@ export function ExamForm() {
         positive_marks: sq.positive_marks,
         negative_marks: sq.negative_marks,
         is_optional: false,
+        allow_revise: sq.allow_revise,
       }));
 
       await examService.update(id, {
@@ -526,6 +537,11 @@ export function ExamForm() {
                           Allow participants to revise answers
                         </Label>
                       </div>
+                      <p className="text-xs text-muted-foreground pl-8 max-w-xl">
+                        When enabled, students can change their answer before you move on. Use the{' '}
+                        <span className="font-medium">Revise</span> column in the question list to disallow
+                        changes on individual questions (one-and-done).
+                      </p>
 
                       <div className="flex items-center space-x-2 pt-3">
                         <Checkbox
@@ -663,17 +679,19 @@ export function ExamForm() {
                 <CardHeader>
                   <CardTitle>Select Questions</CardTitle>
                   <CardDescription>
-                    Choose questions from your question bank and set marks
+                    Choose questions from your question bank and set marks. Use the same tags you add when creating
+                    questions to narrow the list.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {/* Search and Filters */}
                   <div className="space-y-4 mb-6">
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                       <Input
                         placeholder="Search questions..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        className="sm:col-span-2 lg:col-span-1"
                       />
                       <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
                         <SelectTrigger>
@@ -694,6 +712,20 @@ export function ExamForm() {
                           <SelectItem value="all">All Types</SelectItem>
                           <SelectItem value="mcq">MCQ</SelectItem>
                           <SelectItem value="true_false">True/False</SelectItem>
+                          <SelectItem value="multiple_select">Multiple Select</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={filterTag} onValueChange={setFilterTag}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Filter by tag" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All tags</SelectItem>
+                          {tagOptions.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -730,6 +762,7 @@ export function ExamForm() {
                               <TableHead>Question</TableHead>
                               <TableHead>Type</TableHead>
                               <TableHead>Difficulty</TableHead>
+                              <TableHead>Tags</TableHead>
                               <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -755,6 +788,15 @@ export function ExamForm() {
                                   >
                                     {question.difficulty}
                                   </span>
+                                </TableCell>
+                                <TableCell className="max-w-[140px] text-muted-foreground text-sm">
+                                  {question.tags?.length ? (
+                                    <span className="line-clamp-2" title={question.tags.join(', ')}>
+                                      {question.tags.join(', ')}
+                                    </span>
+                                  ) : (
+                                    '—'
+                                  )}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <div className="flex items-center justify-end gap-2">
@@ -844,6 +886,9 @@ export function ExamForm() {
                           <TableRow>
                             <TableHead className="w-12">Order</TableHead>
                             <TableHead>Question</TableHead>
+                            <TableHead className="w-28 text-center">
+                              <span title="Requires exam revisable enabled">Revise</span>
+                            </TableHead>
                             <TableHead className="w-32">Positive Marks</TableHead>
                             <TableHead className="w-32">Negative Marks</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -859,6 +904,26 @@ export function ExamForm() {
                                   <div
                                     className="prose prose-sm max-w-none line-clamp-2"
                                     dangerouslySetInnerHTML={{ __html: sq.question.text }}
+                                  />
+                                </TableCell>
+                                <TableCell className="text-center align-middle">
+                                  <Checkbox
+                                    checked={sq.allow_revise}
+                                    disabled={!examData.revisable}
+                                    title={
+                                      examData.revisable
+                                        ? 'Allow changing answer before next question'
+                                        : 'Turn on exam revisable above to edit per question'
+                                    }
+                                    onCheckedChange={(checked) =>
+                                      setSelectedQuestions(
+                                        selectedQuestions.map((row) =>
+                                          row.question.id === sq.question.id
+                                            ? { ...row, allow_revise: checked === true }
+                                            : row
+                                        )
+                                      )
+                                    }
                                   />
                                 </TableCell>
                                 <TableCell>
@@ -1021,7 +1086,7 @@ export function ExamForm() {
                               className="flex items-start justify-between p-3 border rounded-lg"
                             >
                               <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
                                   <span className="font-medium">Q{idx + 1}:</span>
                                   <span className="text-xs px-2 py-0.5 bg-secondary rounded">
                                     {sq.question.type}
@@ -1029,6 +1094,17 @@ export function ExamForm() {
                                   <span className="text-xs px-2 py-0.5 bg-secondary rounded">
                                     {sq.question.difficulty}
                                   </span>
+                                  {examData.revisable && (
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded ${
+                                        sq.allow_revise
+                                          ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100'
+                                          : 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200'
+                                      }`}
+                                    >
+                                      {sq.allow_revise ? 'Answer revisable' : 'No revise (locked after first submit)'}
+                                    </span>
+                                  )}
                                 </div>
                                 <div
                                   className="prose prose-sm max-w-none text-sm [&_.video-embed-wrapper]:my-2 [&_img]:max-h-40 [&_img]:rounded"

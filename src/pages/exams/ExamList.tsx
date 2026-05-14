@@ -162,6 +162,16 @@ export function ExamList() {
   // Ensure exams is always an array
   const safeExams = Array.isArray(exams) ? exams : [];
 
+  const formatLastAttempt = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -274,6 +284,7 @@ export function ExamList() {
                   <TableHead>Status</TableHead>
                   <TableHead>Questions</TableHead>
                   <TableHead>Participants</TableHead>
+                  <TableHead>Last attempt</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -312,6 +323,9 @@ export function ExamList() {
                     </TableCell>
                     <TableCell>{exam.question_count || 0}</TableCell>
                     <TableCell>{exam.participant_count || 0}</TableCell>
+                    <TableCell className="text-muted-foreground whitespace-nowrap text-sm">
+                      {formatLastAttempt(exam.last_attempt_at)}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button

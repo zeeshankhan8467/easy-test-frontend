@@ -28,10 +28,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { QuestionEditor } from '@/components/QuestionEditor';
-import { questionService, Question, QuestionCreate, AIGenerateRequest } from '@/services/questions';
+import { questionService, Question, QuestionCreate, AIGenerateRequest, QuestionListParams } from '@/services/questions';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Sparkles, Loader2, Trash2, Eye, Edit, Upload } from 'lucide-react';
+import { Plus, Sparkles, Loader2, Trash2, Eye, Edit, Upload, Download } from 'lucide-react';
 import { getOptionLabel } from '@/lib/optionDisplay';
+import { downloadQuestionImportSample } from '@/lib/sampleImportSheets';
 import { authService } from '@/services/auth';
 import { schoolService, School } from '@/services/schools';
 import { examService, ExamOwner } from '@/services/exams';
@@ -46,6 +47,8 @@ export function Questions() {
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [deleteAllBusy, setDeleteAllBusy] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewQuestion, setPreviewQuestion] = useState<Question | null>(null);
   const { toast } = useToast();
@@ -138,6 +141,36 @@ export function Questions() {
       setQuestions([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getQuestionListParams = (): QuestionListParams | undefined => {
+    const params: QuestionListParams = {};
+    if (showFilters) {
+      if (filterSchoolId !== '') params.school_id = filterSchoolId;
+      if (filterTeacherId !== '') params.teacher_id = filterTeacherId;
+    }
+    return Object.keys(params).length ? params : undefined;
+  };
+
+  const handleDeleteAllQuestions = async () => {
+    setDeleteAllBusy(true);
+    try {
+      const { deleted } = await questionService.deleteAll(getQuestionListParams());
+      toast({
+        title: 'Questions deleted',
+        description: `Removed ${deleted} question(s). They are also removed from any draft exams that referenced them.`,
+      });
+      setDeleteAllDialogOpen(false);
+      await loadQuestions();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.error || error?.response?.data?.detail || 'Failed to delete questions',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteAllBusy(false);
     }
   };
 
@@ -486,6 +519,12 @@ export function Questions() {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" size="sm" onClick={downloadQuestionImportSample}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download sample CSV
+                  </Button>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="qfile">File</Label>
                   <Input
@@ -733,8 +772,40 @@ export function Questions() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={safeQuestions.length === 0}
+            onClick={() => setDeleteAllDialogOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete all
+          </Button>
         </div>
       </div>
+
+      <Dialog open={deleteAllDialogOpen} onOpenChange={setDeleteAllDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete all questions?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes every question you can manage with the current <strong>school / teacher</strong>{' '}
+              filters (same as the API list). The difficulty dropdown on this page only hides rows in the table; it
+              does not limit delete — use filters to narrow scope. Draft exams lose those question links; frozen exam
+              snapshots are unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setDeleteAllDialogOpen(false)} disabled={deleteAllBusy}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDeleteAllQuestions} disabled={deleteAllBusy}>
+              {deleteAllBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Delete all
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

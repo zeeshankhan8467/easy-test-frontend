@@ -247,6 +247,25 @@ export function Attendance() {
     setWhatsAppDialogOpen(true);
   };
 
+  const whatsAppSelectableInViewCount = useMemo(
+    () => whatsAppCandidates.filter((p) => (p.parent_whatsapp || '').trim()).length,
+    [whatsAppCandidates],
+  );
+
+  const handleWhatsAppSelectAllVisible = () => {
+    setSelectedWhatsAppStudentIds((prev) => {
+      const next = new Set(prev);
+      whatsAppCandidates.forEach((p) => {
+        if ((p.parent_whatsapp || '').trim()) next.add(Number(p.id));
+      });
+      return next;
+    });
+  };
+
+  const handleWhatsAppClearSelection = () => {
+    setSelectedWhatsAppStudentIds(new Set());
+  };
+
   const handleDownload = async (format: 'excel' | 'pdf') => {
     if (!selectedDate) return;
     try {
@@ -686,12 +705,35 @@ export function Attendance() {
             </div>
 
             <div className="space-y-2">
-              <Label>Select students</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="mb-0">Select students</Label>
+                <span className="text-xs text-muted-foreground">Selected: {selectedWhatsAppStudentIds.size}</span>
+              </div>
               <Input
                 placeholder="Search by name, keypad ID, or parent WhatsApp number"
                 value={whatsAppSearch}
                 onChange={(e) => setWhatsAppSearch(e.target.value)}
               />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleWhatsAppSelectAllVisible}
+                  disabled={whatsAppSelectableInViewCount === 0 || sendingWhatsApp}
+                >
+                  Select all
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleWhatsAppClearSelection}
+                  disabled={selectedWhatsAppStudentIds.size === 0 || sendingWhatsApp}
+                >
+                  Clear selection
+                </Button>
+              </div>
               <div className="max-h-56 overflow-auto border rounded-md p-2 space-y-2">
                 {whatsAppCandidates.length === 0 ? (
                   <p className="text-sm text-muted-foreground px-1 py-2">No students found.</p>
