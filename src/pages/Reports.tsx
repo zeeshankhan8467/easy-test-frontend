@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -43,17 +44,37 @@ export function Reports() {
   const [report, setReport] = useState<ExamReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
+  const [questionAnalysisScope, setQuestionAnalysisScope] = useState<'voted' | 'all'>('voted');
   const { toast } = useToast();
 
   useEffect(() => {
     loadExams();
   }, []);
 
+  const loadReport = useCallback(async () => {
+    if (!selectedExamId) return;
+    setReportLoading(true);
+    try {
+      const data = await reportService.getExamReport(selectedExamId, {
+        question_scope: questionAnalysisScope,
+      });
+      setReport(data);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load report',
+        variant: 'destructive',
+      });
+    } finally {
+      setReportLoading(false);
+    }
+  }, [selectedExamId, questionAnalysisScope, toast]);
+
   useEffect(() => {
     if (selectedExamId) {
       loadReport();
     }
-  }, [selectedExamId]);
+  }, [selectedExamId, loadReport]);
 
   const loadExams = async () => {
     try {
@@ -83,24 +104,6 @@ export function Reports() {
     const n = Math.max(0, Number(sec) || 0);
     return `${n.toFixed(1)}s avg`;
   };
-
-  const loadReport = async () => {
-    if (!selectedExamId) return;
-    setReportLoading(true);
-    try {
-      const data = await reportService.getExamReport(selectedExamId);
-      setReport(data);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load report',
-        variant: 'destructive',
-      });
-    } finally {
-      setReportLoading(false);
-    }
-  };
-
 
   const handleExport = async (format: 'excel' | 'csv', layout?: 'individual' | 'questions' | 'personal_achievement') => {
     if (!selectedExamId) return;
@@ -133,6 +136,15 @@ export function Reports() {
     return [...report.participant_results].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
   }, [report?.participant_results]);
 
+  const accuracyData = useMemo(
+    () =>
+      (report?.question_analysis ?? []).map((q, index) => ({
+        question: `Q${index + 1}`,
+        accuracy: q.accuracy,
+      })),
+    [report?.question_analysis]
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -140,11 +152,6 @@ export function Reports() {
       </div>
     );
   }
-
-  const accuracyData = report?.question_analysis.map((q) => ({
-    question: `Q${report.question_analysis.indexOf(q) + 1}`,
-    accuracy: q.accuracy,
-  }));
 
   const scoreDistribution = report?.participant_results.reduce(
     (acc, result) => {
@@ -213,7 +220,13 @@ export function Reports() {
           <CardDescription>Choose an exam to view reports</CardDescription>
         </CardHeader>
         <CardContent>
-          <Select value={selectedExamId} onValueChange={setSelectedExamId}>
+          <Select
+            value={selectedExamId}
+            onValueChange={(v) => {
+              setSelectedExamId(v);
+              setQuestionAnalysisScope('voted');
+            }}
+          >
             <SelectTrigger className="w-full max-w-md">
               <SelectValue placeholder="Select an exam" />
             </SelectTrigger>
@@ -286,10 +299,41 @@ export function Reports() {
 
             <TabsContent value="questions" className="space-y-4">
               <Card>
+                <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="space-y-1">
+                    <CardTitle>Question analysis scope</CardTitle>
+                    <CardDescription>
+                      <strong>Voted</strong> uses only participants who submitted an answer per question.{' '}
+                      <strong>All assigned</strong> uses everyone assigned to the exam (ExamParticipant); unanswered
+                      counts as no response for percentages and correct rate.
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-col gap-2 min-w-[220px]">
+                    <Label htmlFor="question-scope">Participants</Label>
+                    <Select
+                      value={questionAnalysisScope}
+                      onValueChange={(v) => setQuestionAnalysisScope(v as 'voted' | 'all')}
+                    >
+                      <SelectTrigger id="question-scope">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="voted">Voted (answered)</SelectItem>
+                        <SelectItem value="all">All assigned</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardHeader>
+              </Card>
+
+              <Card>
                 <CardHeader>
                   <CardTitle>Question-wise Accuracy</CardTitle>
                   <CardDescription>
                     Performance analysis for each question
+                    {report?.assigned_participant_count != null && questionAnalysisScope === 'all'
+                      ? ` — ${report.assigned_participant_count} assigned`
+                      : null}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -310,7 +354,9 @@ export function Reports() {
                 <CardHeader>
                   <CardTitle>Question Details</CardTitle>
                   <CardDescription>
-                    Per-question option breakdown. Correct option is highlighted in green.
+                    Per-question option breakdown. Correct option is highlighted in green. Percentages use{' '}
+                    {questionAnalysisScope === 'all' ? 'all assigned participants' : 'answered only'} as the
+                    denominator.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -319,7 +365,10 @@ export function Reports() {
                       const options = q.options ?? [];
                       const optionVotes = q.option_votes ?? [];
                       const correctIndices = new Set((q.correct_answer ?? []).map(Number));
-                      const totalVoted = q.total_attempts;
+                      const denominator = q.total_attempts;
+                      const countLabel = questionAnalysisScope === 'all' ? 'Count' : 'Voted';
+                      const totalLabel = questionAnalysisScope === 'all' ? 'Assigned' : 'Answered';
+                      const noResponse = Math.max(0, q.no_response_count ?? 0);
                       const slideType = 'Choice';
                       return (
                         <div key={q.question_id} className="border rounded-lg p-4 space-y-3">
@@ -336,14 +385,14 @@ export function Reports() {
                             <TableHeader>
                               <TableRow>
                                 <TableHead>Option</TableHead>
-                                <TableHead>Voted</TableHead>
+                                <TableHead>{countLabel}</TableHead>
                                 <TableHead>Percentage</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {options.map((opt, i) => {
                                 const voted = optionVotes[i] ?? 0;
-                                const pct = totalVoted > 0 ? (voted / totalVoted) * 100 : 0;
+                                const pct = denominator > 0 ? (voted / denominator) * 100 : 0;
                                 const isCorrect = correctIndices.has(i);
                                 return (
                                   <TableRow
@@ -358,9 +407,18 @@ export function Reports() {
                                   </TableRow>
                                 );
                               })}
+                              {noResponse > 0 ? (
+                                <TableRow className="bg-muted/40">
+                                  <TableCell className="text-muted-foreground">No response</TableCell>
+                                  <TableCell>{noResponse}</TableCell>
+                                  <TableCell>
+                                    {denominator > 0 ? ((noResponse / denominator) * 100).toFixed(2) : '0.00'}%
+                                  </TableCell>
+                                </TableRow>
+                              ) : null}
                               <TableRow className="bg-muted/50 font-medium">
-                                <TableCell>Voted</TableCell>
-                                <TableCell>{totalVoted}</TableCell>
+                                <TableCell>{totalLabel}</TableCell>
+                                <TableCell>{denominator}</TableCell>
                                 <TableCell>100.00%</TableCell>
                               </TableRow>
                             </TableBody>

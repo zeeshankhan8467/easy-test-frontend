@@ -11,6 +11,10 @@ export interface QuestionAnalysis {
   option_display?: 'alpha' | 'numeric';
   correct_answer?: number[];
   option_votes?: number[];
+  /** Participants who answered this question (same as total_attempts when scope is voted). */
+  answered_count?: number;
+  /** When scope is all assigned: assigned − answered. */
+  no_response_count?: number;
 }
 
 /** Per-question attempt row; response/correct_answer use A,B,C… or 1,2,3… per question option_display. */
@@ -45,6 +49,10 @@ export interface ExamReport {
   lowest_score: number;
   question_analysis: QuestionAnalysis[];
   participant_results: ParticipantResult[];
+  /** Echo of request: voted | all */
+  question_analysis_scope?: 'voted' | 'all';
+  /** Roster size used when question_analysis_scope is all (ExamParticipant count or fallback). */
+  assigned_participant_count?: number;
 }
 
 export interface PersonalAchievement {
@@ -132,6 +140,14 @@ export interface SendAttendanceWhatsAppResponse {
 
 export interface StudentPerformanceRow {
   participant_id: number;
+  exam_id: number;
+  exam_name: string;
+  /** ISO 8601 — when the exam record was created */
+  exam_created_at?: string | null;
+  /** ISO 8601 — when the exam record was last updated */
+  exam_updated_at?: string | null;
+  /** ISO 8601 — when this attempt was submitted (if any) */
+  submitted_at?: string | null;
   admission_no: string;
   roll_no: string;
   student_name: string;
@@ -139,6 +155,7 @@ export interface StudentPerformanceRow {
   section: string;
   teacher_name: string;
   subject: string;
+  /** Percentage for this participant on this exam (one submitted attempt). */
   total_percentage: number;
 }
 
@@ -148,8 +165,13 @@ export interface StudentPerformanceResponse {
 }
 
 export const reportService = {
-  getExamReport: async (examId: string): Promise<ExamReport> => {
-    const response = await api.get<ExamReport>(`/reports/exams/${examId}/`);
+  getExamReport: async (
+    examId: string,
+    params?: { question_scope?: 'voted' | 'all' }
+  ): Promise<ExamReport> => {
+    const response = await api.get<ExamReport>(`/reports/exams/${examId}/`, {
+      params: params?.question_scope ? { question_scope: params.question_scope } : {},
+    });
     return response.data;
   },
 
@@ -220,6 +242,8 @@ export const reportService = {
     section?: string;
     teacher_name?: string;
     subject?: string;
+    exam_name?: string;
+    exam_id?: string | number;
     from_date?: string;
     to_date?: string;
   }): Promise<StudentPerformanceResponse> => {
@@ -236,6 +260,8 @@ export const reportService = {
       section?: string;
       teacher_name?: string;
       subject?: string;
+      exam_name?: string;
+      exam_id?: string | number;
       from_date?: string;
       to_date?: string;
       format?: 'excel' | 'csv';

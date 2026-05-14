@@ -72,54 +72,52 @@ export function downloadQuestionImportSample(): void {
 }
 
 /**
- * Sample sheet for POST /participants/import/ — Name + Keypad ID (or clicker id) required; optional extras.
+ * Sample sheet for POST /participants/import/ — Keypad ID required; name optional (defaults to keypad ID).
+ * Column order matches the school's reference roster sheet so the import is drop-in compatible.
  */
 export function downloadParticipantImportSample(): void {
-  const rows: string[][] = [
-    [
-      'Name',
-      'Keypad ID',
-      'Email',
-      'Roll No.',
-      'Admission No.',
-      'Class',
-      'Section',
-      'Parent Email ID',
-      'Parent WhatsApp Number',
-    ],
-    [
-      'Sample Student A',
-      '101',
-      'student.a@example.com',
-      '12',
-      'ADM-001',
-      '6',
-      'A',
-      'parent.a@example.com',
-      '919876543210',
-    ],
-    [
-      'Sample Student B',
-      '102',
-      '',
-      '13',
-      'ADM-002',
-      '6',
-      'A',
-      '',
-      '919876543211',
-    ],
-    [
-      '',
-      '103',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-    ],
+  const headers = [
+    'Keypad ID',
+    'Name',
+    'Roll No',
+    'WhatsApp Number',
+    'Admission No',
+    'Class',
+    'Subject',
+    'Section',
+    'Team',
+    'Group',
+    'House',
+    'Gender',
+    'City',
+    'UID',
+    'Employee Code',
+    'Teacher Name',
+    'Email ID',
+    'Parent Email ID',
+    'Parent WhatsApp Number',
   ];
-  downloadCsv('easytest-participants-import-sample.csv', rows);
+  const exampleRow = [
+    '1',
+    'raj',
+    '100',
+    '919599188116',
+    '2020',
+    '7',
+    'hindi',
+    'A',
+    'A',
+    'anikita',
+    'b41',
+    'male',
+    'delhi',
+    '444',
+    '34343',
+    'bhawna',
+    'praveen.kumar@gmail.com',
+    'praveen.kumar@gmail.com',
+    '919599188117',
+  ];
+  const emptyRow = headers.map(() => '');
+  downloadCsv('easytest-participants-import-sample.csv', [headers, exampleRow, emptyRow]);
 }

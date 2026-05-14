@@ -38,6 +38,11 @@ import {
 const ALL_SCHOOLS_VALUE = '__all_schools__';
 const ALL_TEACHERS_VALUE = '__all_teachers__';
 const ALL_CLASSES_VALUE = '__all_classes__';
+const ALL_SECTIONS_VALUE = '__all_sections__';
+const ALL_TEAMS_VALUE = '__all_teams__';
+const NONE_VALUE = '__none__';
+const CLASS_CHOICES = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const SECTION_CHOICES = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
 
 function buildEmptyRow(): ParticipantRow {
   const row: ParticipantRow = { name: '', clicker_id: '' };
@@ -75,8 +80,14 @@ export function Participants() {
   );
   const [filterTeacherId, setFilterTeacherId] = useState<string>('');
   const [filterClass, setFilterClass] = useState<string>('');
+  const [filterSection, setFilterSection] = useState<string>('');
+  const [filterTeam, setFilterTeam] = useState<string>('');
   const [classOptions, setClassOptions] = useState<string[]>([]);
+  const [sectionOptions, setSectionOptions] = useState<string[]>([]);
+  const [teamOptions, setTeamOptions] = useState<string[]>([]);
   const [importDefaultClass, setImportDefaultClass] = useState('');
+  const [importDefaultSection, setImportDefaultSection] = useState('');
+  const [importDefaultTeam, setImportDefaultTeam] = useState('');
 
   const [createForm, setCreateForm] = useState<ParticipantRow>(() => buildEmptyRow());
 
@@ -123,24 +134,41 @@ export function Participants() {
     if (showAdminFilters && filterSchoolId) p.school_id = Number(filterSchoolId);
     if (showAdminFilters && filterTeacherId) p.teacher_id = Number(filterTeacherId);
     if (filterClass) p.class = filterClass;
+    if (filterSection) p.section = filterSection;
+    if (filterTeam) p.team = filterTeam;
     return p;
-  }, [showAdminFilters, filterSchoolId, filterTeacherId, filterClass]);
+  }, [showAdminFilters, filterSchoolId, filterTeacherId, filterClass, filterSection, filterTeam]);
 
-  const loadClassOptions = useCallback(async () => {
+  const loadRosterFilterOptions = useCallback(async () => {
     try {
-      const p: ParticipantListParams = {};
-      if (showAdminFilters && filterSchoolId) p.school_id = Number(filterSchoolId);
-      if (showAdminFilters && filterTeacherId) p.teacher_id = Number(filterTeacherId);
-      const classes = await participantService.getDistinctClasses(
-        Object.keys(p).length ? p : undefined
-      );
+      const base: ParticipantListParams = {};
+      if (showAdminFilters && filterSchoolId) base.school_id = Number(filterSchoolId);
+      if (showAdminFilters && filterTeacherId) base.teacher_id = Number(filterTeacherId);
+      const classParams = Object.keys(base).length ? base : undefined;
+      const sectionParams: ParticipantListParams = { ...base };
+      if (filterClass) sectionParams.class = filterClass;
+      const teamParams: ParticipantListParams = { ...base };
+      if (filterClass) teamParams.class = filterClass;
+      if (filterSection) teamParams.section = filterSection;
+
+      const [classes, sections, teams] = await Promise.all([
+        participantService.getDistinctClasses(classParams),
+        participantService.getDistinctSections(Object.keys(sectionParams).length ? sectionParams : undefined),
+        participantService.getDistinctTeams(Object.keys(teamParams).length ? teamParams : undefined),
+      ]);
       setClassOptions(classes);
+      setSectionOptions(sections);
+      setTeamOptions(teams);
       setFilterClass((prev) => (prev && !classes.includes(prev) ? '' : prev));
+      setFilterSection((prev) => (prev && !sections.includes(prev) ? '' : prev));
+      setFilterTeam((prev) => (prev && !teams.includes(prev) ? '' : prev));
     } catch (e) {
       console.error(e);
       setClassOptions([]);
+      setSectionOptions([]);
+      setTeamOptions([]);
     }
-  }, [showAdminFilters, filterSchoolId, filterTeacherId]);
+  }, [showAdminFilters, filterSchoolId, filterTeacherId, filterClass, filterSection]);
 
   const loadParticipants = useCallback(async () => {
     setLoading(true);
@@ -166,8 +194,8 @@ export function Participants() {
   }, [loadParticipants]);
 
   useEffect(() => {
-    loadClassOptions();
-  }, [loadClassOptions]);
+    loadRosterFilterOptions();
+  }, [loadRosterFilterOptions]);
 
   const updateCreateForm = (field: string, value: string) => {
     setCreateForm((prev) => ({ ...prev, [field]: value }));
@@ -204,7 +232,7 @@ export function Participants() {
       setCreateDialogOpen(false);
       setCreateForm(buildEmptyRow());
       loadParticipants();
-      loadClassOptions();
+      loadRosterFilterOptions();
     } catch (error: any) {
       const data = error.response?.data;
       const msg = data?.participants?.[0] || data?.clicker_id?.[0] || data?.detail || 'Failed to create participant';
@@ -220,6 +248,8 @@ export function Participants() {
       const result = await participantService.import({
         file: selectedFile,
         ...(importDefaultClass.trim() ? { default_class: importDefaultClass.trim() } : {}),
+        ...(importDefaultSection.trim() ? { default_section: importDefaultSection.trim() } : {}),
+        ...(importDefaultTeam.trim() ? { default_team: importDefaultTeam.trim() } : {}),
       });
       toast({
         title: 'Success',
@@ -235,8 +265,10 @@ export function Participants() {
       setImportDialogOpen(false);
       setSelectedFile(null);
       setImportDefaultClass('');
+      setImportDefaultSection('');
+      setImportDefaultTeam('');
       loadParticipants();
-      loadClassOptions();
+      loadRosterFilterOptions();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -261,7 +293,7 @@ export function Participants() {
       });
       setDeleteAllDialogOpen(false);
       await loadParticipants();
-      loadClassOptions();
+      loadRosterFilterOptions();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -280,7 +312,7 @@ export function Participants() {
       setViewDialogOpen(false);
       setEditDialogOpen(false);
       loadParticipants();
-      loadClassOptions();
+      loadRosterFilterOptions();
     } catch (error: any) {
       toast({ title: 'Error', description: 'Failed to delete participant', variant: 'destructive' });
     }
@@ -345,7 +377,7 @@ export function Participants() {
       setEditDialogOpen(false);
       setEditParticipant(null);
       loadParticipants();
-      loadClassOptions();
+      loadRosterFilterOptions();
     } catch (error: any) {
       const msg = error.response?.data?.clicker_id?.[0] ?? error.response?.data?.detail ?? 'Failed to update participant';
       toast({ title: 'Error', description: typeof msg === 'string' ? msg : 'Failed to update participant', variant: 'destructive' });
@@ -415,6 +447,8 @@ export function Participants() {
             if (!open) {
               setSelectedFile(null);
               setImportDefaultClass('');
+              setImportDefaultSection('');
+              setImportDefaultTeam('');
             }
           }}>
             <DialogTrigger asChild>
@@ -427,7 +461,7 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Import Participants</DialogTitle>
                 <DialogDescription>
-                  Upload CSV or Excel with a <strong>Keypad ID</strong> column (or &quot;clicker id&quot;) — required. <strong>Name</strong> is optional; if missing or blank, the keypad ID is stored as the display name. Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;), <strong>Parent WhatsApp Number</strong> (or &quot;parent phone&quot; / &quot;parent mobile&quot; / &quot;whatsapp&quot;). Use <strong>Default class</strong> to assign one class to every row that has no Class column or an empty class (class-wise roster).
+                  Upload CSV or Excel with a <strong>Keypad ID</strong> column (or &quot;clicker id&quot;) — required. <strong>Name</strong> is optional; if missing or blank, the keypad ID is stored as the display name. Optional: Roll No., Admission No., Class, Subject, Section, Team, Group, House, Gender, City, UID, Employee Code, Teacher Name, Email ID, <strong>Parent Email ID</strong> (or &quot;parent email&quot; / &quot;guardian email&quot;), <strong>Parent WhatsApp Number</strong> (or &quot;parent phone&quot; / &quot;parent mobile&quot; / &quot;whatsapp&quot;). Use <strong>Default class</strong>, <strong>Default section</strong>, and <strong>Default team</strong> to fill rows that omit those columns or leave them blank.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -439,11 +473,55 @@ export function Participants() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="import-default-class">Default class (optional)</Label>
+                  <Select
+                    value={importDefaultClass || NONE_VALUE}
+                    onValueChange={(v) => setImportDefaultClass(v === NONE_VALUE ? '' : v)}
+                  >
+                    <SelectTrigger id="import-default-class">
+                      <SelectValue placeholder="No default" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>No default</SelectItem>
+                      {(importDefaultClass && !CLASS_CHOICES.includes(importDefaultClass)
+                        ? [importDefaultClass, ...CLASS_CHOICES]
+                        : CLASS_CHOICES
+                      ).map((opt) => (
+                        <SelectItem key={opt} value={opt}>
+                          {opt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="import-default-section">Default section (optional)</Label>
+                  <Select
+                    value={importDefaultSection || NONE_VALUE}
+                    onValueChange={(v) => setImportDefaultSection(v === NONE_VALUE ? '' : v)}
+                  >
+                    <SelectTrigger id="import-default-section">
+                      <SelectValue placeholder="No default" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE_VALUE}>No default</SelectItem>
+                      {(importDefaultSection && !SECTION_CHOICES.includes(importDefaultSection)
+                        ? [importDefaultSection, ...SECTION_CHOICES]
+                        : SECTION_CHOICES
+                      ).map((opt) => (
+                        <SelectItem key={opt} value={opt}>
+                          {opt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="import-default-team">Default team (optional)</Label>
                   <Input
-                    id="import-default-class"
-                    placeholder="e.g. 10-A — applied when Class column is missing or empty"
-                    value={importDefaultClass}
-                    onChange={(e) => setImportDefaultClass(e.target.value)}
+                    id="import-default-team"
+                    placeholder="e.g. Red — applied when Team column is missing or empty"
+                    value={importDefaultTeam}
+                    onChange={(e) => setImportDefaultTeam(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -491,24 +569,52 @@ export function Participants() {
               <DialogHeader>
                 <DialogTitle>Add Participant</DialogTitle>
                 <DialogDescription>
-                  Keypad ID is required. Name is optional (if empty, it defaults to the keypad ID). Set <strong>Class</strong> to group students and filter the roster; other fields are optional.
+                  Keypad ID is required. Name is optional (if empty, it defaults to the keypad ID). Set <strong>Class</strong>, <strong>Section</strong>, and <strong>Team</strong> to organize the roster and match the filters above; other fields are optional.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-4">
-                {PARTICIPANT_FIELDS.map((f) => (
-                  <div key={f.key} className="space-y-2">
-                    <Label htmlFor={`create-${f.key}`}>
-                      {f.label} {f.required ? '*' : ''}
-                    </Label>
-                    <Input
-                      id={`create-${f.key}`}
-                      placeholder={f.required ? '' : `Optional`}
-                      value={createForm[f.key] ?? ''}
-                      onChange={(e) => updateCreateForm(f.key, e.target.value)}
-                      type={f.key === 'email_id' || f.key === 'parent_email_id' ? 'email' : 'text'}
-                    />
-                  </div>
-                ))}
+                {PARTICIPANT_FIELDS.map((f) => {
+                  if (f.key === 'class' || f.key === 'section') {
+                    const choices = f.key === 'class' ? CLASS_CHOICES : SECTION_CHOICES;
+                    const current = (createForm[f.key] ?? '').trim();
+                    const extra = current && !choices.includes(current) ? [current] : [];
+                    return (
+                      <div key={f.key} className="space-y-2">
+                        <Label htmlFor={`create-${f.key}`}>{f.label}</Label>
+                        <Select
+                          value={current || NONE_VALUE}
+                          onValueChange={(v) => updateCreateForm(f.key, v === NONE_VALUE ? '' : v)}
+                        >
+                          <SelectTrigger id={`create-${f.key}`}>
+                            <SelectValue placeholder={f.key === 'class' ? 'Select class' : 'Select section'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE_VALUE}>None</SelectItem>
+                            {[...extra, ...choices].map((opt) => (
+                              <SelectItem key={opt} value={opt}>
+                                {opt}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={f.key} className="space-y-2">
+                      <Label htmlFor={`create-${f.key}`}>
+                        {f.label} {f.required ? '*' : ''}
+                      </Label>
+                      <Input
+                        id={`create-${f.key}`}
+                        placeholder={f.required ? '' : `Optional`}
+                        value={createForm[f.key] ?? ''}
+                        onChange={(e) => updateCreateForm(f.key, e.target.value)}
+                        type={f.key === 'email_id' || f.key === 'parent_email_id' ? 'email' : 'text'}
+                      />
+                    </div>
+                  );
+                })}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
@@ -584,16 +690,44 @@ export function Participants() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {dialogFieldOrder.map((key) => {
                       const f = getFieldByKey(key);
+                      if (key === 'class' || key === 'section') {
+                        const choices = key === 'class' ? CLASS_CHOICES : SECTION_CHOICES;
+                        const current = (editForm[key] ?? '').trim();
+                        const extra = current && !choices.includes(current) ? [current] : [];
+                        return (
+                          <div key={key} className="space-y-2">
+                            <Label htmlFor={`edit-${key}`}>{f.label}</Label>
+                            <Select
+                              value={current || NONE_VALUE}
+                              onValueChange={(v) =>
+                                setEditForm((prev) => ({ ...prev, [key]: v === NONE_VALUE ? '' : v }))
+                              }
+                            >
+                              <SelectTrigger id={`edit-${key}`}>
+                                <SelectValue placeholder={key === 'class' ? 'Select class' : 'Select section'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NONE_VALUE}>None</SelectItem>
+                                {[...extra, ...choices].map((opt) => (
+                                  <SelectItem key={opt} value={opt}>
+                                    {opt}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        );
+                      }
                       return (
-                      <div key={key} className="space-y-2">
-                        <Label htmlFor={`edit-${key}`}>{f.label} {f.required ? '*' : ''}</Label>
-                        <Input
-                          id={`edit-${key}`}
-                          type={key === 'email_id' || key === 'parent_email_id' ? 'email' : 'text'}
-                          value={editForm[key] ?? ''}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                        />
-                      </div>
+                        <div key={key} className="space-y-2">
+                          <Label htmlFor={`edit-${key}`}>{f.label} {f.required ? '*' : ''}</Label>
+                          <Input
+                            id={`edit-${key}`}
+                            type={key === 'email_id' || key === 'parent_email_id' ? 'email' : 'text'}
+                            value={editForm[key] ?? ''}
+                            onChange={(e) => setEditForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                          />
+                        </div>
                       );
                     })}
                   </div>
@@ -618,8 +752,8 @@ export function Participants() {
           <CardTitle className="text-lg">Filter roster</CardTitle>
           <CardDescription>
             {showAdminFilters
-              ? 'Choose school and teacher (if applicable), then class. Class values come from each participant\'s Class field.'
-              : 'Filter your roster by class. Set Class when adding or editing a participant, or when importing.'}
+              ? 'Choose school and teacher (if applicable), then narrow by class, section, and team. Values come from each participant\'s extra fields.'
+              : 'Filter your roster by class, section, and team. Set those fields when adding or editing a participant, when importing, or use default section/team on import.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col lg:flex-row gap-4 flex-wrap">
@@ -637,6 +771,9 @@ export function Participants() {
                     if (user?.role === 'school_admin') return;
                     setFilterSchoolId(v === ALL_SCHOOLS_VALUE ? '' : v);
                     setFilterTeacherId('');
+                    setFilterClass('');
+                    setFilterSection('');
+                    setFilterTeam('');
                   }}
                   disabled={user?.role === 'school_admin'}
                 >
@@ -659,7 +796,12 @@ export function Participants() {
                 <Label>Teacher</Label>
                 <Select
                   value={filterTeacherId || ALL_TEACHERS_VALUE}
-                  onValueChange={(v) => setFilterTeacherId(v === ALL_TEACHERS_VALUE ? '' : v)}
+                  onValueChange={(v) => {
+                    setFilterTeacherId(v === ALL_TEACHERS_VALUE ? '' : v);
+                    setFilterClass('');
+                    setFilterSection('');
+                    setFilterTeam('');
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select teacher" />
@@ -682,7 +824,11 @@ export function Participants() {
             <Label>Class</Label>
             <Select
               value={filterClass || ALL_CLASSES_VALUE}
-              onValueChange={(v) => setFilterClass(v === ALL_CLASSES_VALUE ? '' : v)}
+              onValueChange={(v) => {
+                setFilterClass(v === ALL_CLASSES_VALUE ? '' : v);
+                setFilterSection('');
+                setFilterTeam('');
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="All classes" />
@@ -697,6 +843,47 @@ export function Participants() {
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2 flex-1 min-w-[180px]">
+            <Label>Section</Label>
+            <Select
+              value={filterSection || ALL_SECTIONS_VALUE}
+              onValueChange={(v) => {
+                setFilterSection(v === ALL_SECTIONS_VALUE ? '' : v);
+                setFilterTeam('');
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All sections" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_SECTIONS_VALUE}>All sections</SelectItem>
+                {sectionOptions.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2 flex-1 min-w-[180px]">
+            <Label>Team</Label>
+            <Select
+              value={filterTeam || ALL_TEAMS_VALUE}
+              onValueChange={(v) => setFilterTeam(v === ALL_TEAMS_VALUE ? '' : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All teams" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_TEAMS_VALUE}>All teams</SelectItem>
+                {teamOptions.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
@@ -705,7 +892,11 @@ export function Participants() {
           <CardTitle>All Participants</CardTitle>
           <CardDescription>
             {safeParticipants.length} participant(s)
-            {filterClass ? ` in class "${filterClass}"` : ''} — grouped by class when showing all classes
+            {filterClass ? ` in class "${filterClass}"` : ''}
+            {filterSection ? `, section "${filterSection}"` : ''}
+            {filterTeam ? `, team "${filterTeam}"` : ''}
+            {' '}
+            — grouped by class when no class filter is applied
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -802,9 +993,9 @@ export function Participants() {
           <DialogHeader>
             <DialogTitle>Delete all participants?</DialogTitle>
             <DialogDescription>
-              This permanently deletes every participant in your current list ({safeParticipants.length} shown). School
-              and teacher filters apply when you use them. This also removes exam assignments, attempts, answers, and
-              daily attendance for those participants.
+              This permanently deletes every participant in your current list ({safeParticipants.length} shown). Filters
+              for school, teacher, class, section, and team match the list you see. This also removes exam assignments,
+              attempts, answers, and daily attendance for those participants.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">

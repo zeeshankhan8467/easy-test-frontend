@@ -57,6 +57,8 @@ export interface ParticipantImport {
   exam_id?: string;
   /** Applied when a row has no Class column or empty class (same scope as file import). */
   default_class?: string;
+  default_section?: string;
+  default_team?: string;
 }
 
 export interface ParticipantListParams {
@@ -65,6 +67,10 @@ export interface ParticipantListParams {
   teacher_id?: number;
   /** Filter roster by `extra.class` (exact match, trimmed on server). */
   class?: string;
+  /** Filter by `extra.section` (exact match). */
+  section?: string;
+  /** Filter by `extra.team` (exact match). */
+  team?: string;
 }
 
 export const participantService = {
@@ -81,6 +87,12 @@ export const participantService = {
     if (params.teacher_id != null) queryParams.set('teacher_id', String(params.teacher_id));
     if (params.class != null && String(params.class).trim() !== '') {
       queryParams.set('class', String(params.class).trim());
+    }
+    if (params.section != null && String(params.section).trim() !== '') {
+      queryParams.set('section', String(params.section).trim());
+    }
+    if (params.team != null && String(params.team).trim() !== '') {
+      queryParams.set('team', String(params.team).trim());
     }
     const qs = queryParams.toString();
     const url = qs ? `/participants/?${qs}` : '/participants/';
@@ -104,6 +116,37 @@ export const participantService = {
     const url = qs ? `/participants/distinct_classes/?${qs}` : '/participants/distinct_classes/';
     const response = await api.get<{ classes: string[] }>(url);
     return Array.isArray(response.data?.classes) ? response.data.classes : [];
+  },
+
+  getDistinctSections: async (params?: ParticipantListParams): Promise<string[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.exam_id) queryParams.set('exam_id', params.exam_id);
+    if (params?.school_id != null) queryParams.set('school_id', String(params.school_id));
+    if (params?.teacher_id != null) queryParams.set('teacher_id', String(params.teacher_id));
+    if (params?.class != null && String(params.class).trim() !== '') {
+      queryParams.set('class', String(params.class).trim());
+    }
+    const qs = queryParams.toString();
+    const url = qs ? `/participants/distinct_sections/?${qs}` : '/participants/distinct_sections/';
+    const response = await api.get<{ sections: string[] }>(url);
+    return Array.isArray(response.data?.sections) ? response.data.sections : [];
+  },
+
+  getDistinctTeams: async (params?: ParticipantListParams): Promise<string[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.exam_id) queryParams.set('exam_id', params.exam_id);
+    if (params?.school_id != null) queryParams.set('school_id', String(params.school_id));
+    if (params?.teacher_id != null) queryParams.set('teacher_id', String(params.teacher_id));
+    if (params?.class != null && String(params.class).trim() !== '') {
+      queryParams.set('class', String(params.class).trim());
+    }
+    if (params?.section != null && String(params.section).trim() !== '') {
+      queryParams.set('section', String(params.section).trim());
+    }
+    const qs = queryParams.toString();
+    const url = qs ? `/participants/distinct_teams/?${qs}` : '/participants/distinct_teams/';
+    const response = await api.get<{ teams: string[] }>(url);
+    return Array.isArray(response.data?.teams) ? response.data.teams : [];
   },
 
   getById: async (id: string): Promise<Participant> => {
@@ -146,6 +189,12 @@ export const participantService = {
     if (params?.class != null && String(params.class).trim() !== '') {
       queryParams.class = String(params.class).trim();
     }
+    if (params?.section != null && String(params.section).trim() !== '') {
+      queryParams.section = String(params.section).trim();
+    }
+    if (params?.team != null && String(params.team).trim() !== '') {
+      queryParams.team = String(params.team).trim();
+    }
     const response = await api.post<{ deleted: number }>(
       '/participants/delete_all/',
       { confirm: true },
@@ -162,6 +211,12 @@ export const participantService = {
     }
     if (data.default_class != null && String(data.default_class).trim() !== '') {
       formData.append('default_class', String(data.default_class).trim());
+    }
+    if (data.default_section != null && String(data.default_section).trim() !== '') {
+      formData.append('default_section', String(data.default_section).trim());
+    }
+    if (data.default_team != null && String(data.default_team).trim() !== '') {
+      formData.append('default_team', String(data.default_team).trim());
     }
     const response = await api.post<{ imported: number; errors: string[] }>(
       '/participants/import/',
