@@ -26,10 +26,15 @@ import { examService, ExamQuestionInput, ExamOwner } from '@/services/exams';
 import { Question } from '@/services/questions';
 import { authService } from '@/services/auth';
 import { schoolService, School } from '@/services/schools';
+import { participantService, Participant, ParticipantListParams } from '@/services/participants';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, ArrowLeft, Plus, X, Eye, ArrowUp, ArrowDown, Lock } from 'lucide-react';
+import { Loader2, ArrowLeft, Plus, X, Eye, ArrowUp, ArrowDown, Lock, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
-type Step = 'details' | 'questions' | 'review';
+type Step = 'details' | 'questions' | 'participants' | 'review';
+
+const ALL_CLASSES_VALUE = '__all_classes__';
+const ALL_SECTIONS_VALUE = '__all_sections__';
+const ALL_TEAMS_VALUE = '__all_teams__';
 
 export function ExamForm() {
   const { id } = useParams<{ id: string }>();
@@ -77,6 +82,17 @@ export function ExamForm() {
   const [filterTag, setFilterTag] = useState<string>('all');
   const [tagOptions, setTagOptions] = useState<string[]>([]);
 
+  // Participants step
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<Set<number>>(new Set());
+  const [participantFilterClass, setParticipantFilterClass] = useState<string>('');
+  const [participantFilterSection, setParticipantFilterSection] = useState<string>('');
+  const [participantFilterTeam, setParticipantFilterTeam] = useState<string>('');
+  const [participantClassOptions, setParticipantClassOptions] = useState<string[]>([]);
+  const [participantSectionOptions, setParticipantSectionOptions] = useState<string[]>([]);
+  const [participantTeamOptions, setParticipantTeamOptions] = useState<string[]>([]);
+
   const user = authService.getCurrentUser();
   const canSelectOwner = user?.role === 'super_admin' || user?.role === 'school_admin';
   const isSuperAdmin = user?.role === 'super_admin';
@@ -103,6 +119,74 @@ export function ExamForm() {
   useEffect(() => {
     loadAvailableQuestions();
   }, [searchQuery, filterDifficulty, filterType, filterTag, id]);
+
+  // Build the scope used for both listing and the distinct-option endpoints so
+  // class/section/team always reflect the same roster the user can pick from.
+  const buildParticipantListParams = (
+    overrides: Partial<ParticipantListParams> = {},
+  ): ParticipantListParams => {
+    const p: ParticipantListParams = {};
+    if (ownerUserId != null) p.teacher_id = ownerUserId;
+    if (participantFilterClass) p.class = participantFilterClass;
+    if (participantFilterSection) p.section = participantFilterSection;
+    if (participantFilterTeam) p.team = participantFilterTeam;
+    return { ...p, ...overrides };
+  };
+
+  const loadParticipants = async () => {
+    setLoadingParticipants(true);
+    try {
+      const params = buildParticipantListParams();
+      const data = await participantService.getAll(Object.keys(params).length ? params : undefined);
+      setParticipants(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to load participants for exam', error);
+      setParticipants([]);
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
+
+  const loadParticipantFilterOptions = async () => {
+    try {
+      const baseParams: ParticipantListParams = {};
+      if (ownerUserId != null) baseParams.teacher_id = ownerUserId;
+      const classParams = Object.keys(baseParams).length ? baseParams : undefined;
+      const sectionParams: ParticipantListParams = { ...baseParams };
+      if (participantFilterClass) sectionParams.class = participantFilterClass;
+      const teamParams: ParticipantListParams = { ...baseParams };
+      if (participantFilterClass) teamParams.class = participantFilterClass;
+      if (participantFilterSection) teamParams.section = participantFilterSection;
+
+      const [classes, sections, teams] = await Promise.all([
+        participantService.getDistinctClasses(classParams),
+        participantService.getDistinctSections(
+          Object.keys(sectionParams).length ? sectionParams : undefined,
+        ),
+        participantService.getDistinctTeams(
+          Object.keys(teamParams).length ? teamParams : undefined,
+        ),
+      ]);
+      setParticipantClassOptions(classes);
+      setParticipantSectionOptions(sections);
+      setParticipantTeamOptions(teams);
+      setParticipantFilterClass((prev) => (prev && !classes.includes(prev) ? '' : prev));
+      setParticipantFilterSection((prev) => (prev && !sections.includes(prev) ? '' : prev));
+      setParticipantFilterTeam((prev) => (prev && !teams.includes(prev) ? '' : prev));
+    } catch (error) {
+      console.error('Failed to load participant filter options', error);
+      setParticipantClassOptions([]);
+      setParticipantSectionOptions([]);
+      setParticipantTeamOptions([]);
+    }
+  };
+
+  // Load participants whenever the user enters the step or changes filters / owner.
+  useEffect(() => {
+    if (currentStep !== 'participants') return;
+    loadParticipants();
+    loadParticipantFilterOptions();
+  }, [currentStep, ownerUserId, participantFilterClass, participantFilterSection, participantFilterTeam]);
 
   const loadExam = async () => {
     try {
@@ -131,6 +215,11 @@ export function ExamForm() {
         setSelectedQuestions(questions);
         setBulkPositiveMarks(questions[0]?.positive_marks ?? 1.0);
         setBulkNegativeMarks(questions[0]?.negative_marks ?? 0.0);
+      }
+
+      // Preload existing participant assignments so editing keeps the current selection.
+      if (Array.isArray(exam.participant_ids)) {
+        setSelectedParticipantIds(new Set(exam.participant_ids));
       }
     } catch (error: any) {
       toast({
@@ -316,10 +405,12 @@ export function ExamForm() {
         allow_revise: sq.allow_revise,
       }));
 
+      const participantIdsArray = Array.from(selectedParticipantIds);
       if (id) {
         await examService.update(id, {
           ...examData,
           questions,
+          participant_ids: participantIdsArray,
           ...(canSelectOwner ? { owner_user_id: ownerUserId } : {}),
         });
         toast({
@@ -330,6 +421,7 @@ export function ExamForm() {
         const exam = await examService.create({
           ...examData,
           questions,
+          participant_ids: participantIdsArray,
           ...(canSelectOwner ? { owner_user_id: ownerUserId } : {}),
         });
         toast({
@@ -384,6 +476,7 @@ export function ExamForm() {
       await examService.update(id, {
         ...examData,
         questions,
+        participant_ids: Array.from(selectedParticipantIds),
       });
 
       // Then freeze
@@ -448,9 +541,16 @@ export function ExamForm() {
           <span className="font-medium">Questions</span>
         </div>
         <div className="w-12 h-0.5 bg-border" />
+        <div className={`flex items-center gap-2 ${currentStep === 'participants' ? 'text-primary' : ''}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'participants' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+            3
+          </div>
+          <span className="font-medium">Participants</span>
+        </div>
+        <div className="w-12 h-0.5 bg-border" />
         <div className={`flex items-center gap-2 ${currentStep === 'review' ? 'text-primary' : ''}`}>
           <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'review' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-            3
+            4
           </div>
           <span className="font-medium">Review</span>
         </div>
@@ -1002,9 +1102,216 @@ export function ExamForm() {
                     </Button>
                     <Button
                       type="button"
-                      onClick={() => setCurrentStep('review')}
+                      onClick={() => setCurrentStep('participants')}
                       disabled={selectedQuestions.length === 0}
                     >
+                      Next: Participants
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Step 3: Participants */}
+          {currentStep === 'participants' && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Assign Participants
+                  </CardTitle>
+                  <CardDescription>
+                    Pick students for this exam. Narrow the roster by class, section, or team — then
+                    use <strong>Select all</strong> to add everyone shown, or check individual rows.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Class</Label>
+                      <Select
+                        value={participantFilterClass || ALL_CLASSES_VALUE}
+                        onValueChange={(v) => {
+                          const next = v === ALL_CLASSES_VALUE ? '' : v;
+                          setParticipantFilterClass(next);
+                          setParticipantFilterSection('');
+                          setParticipantFilterTeam('');
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="All classes" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ALL_CLASSES_VALUE}>All classes</SelectItem>
+                          {participantClassOptions.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Section</Label>
+                      <Select
+                        value={participantFilterSection || ALL_SECTIONS_VALUE}
+                        onValueChange={(v) => {
+                          const next = v === ALL_SECTIONS_VALUE ? '' : v;
+                          setParticipantFilterSection(next);
+                          setParticipantFilterTeam('');
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="All sections" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ALL_SECTIONS_VALUE}>All sections</SelectItem>
+                          {participantSectionOptions.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Team</Label>
+                      <Select
+                        value={participantFilterTeam || ALL_TEAMS_VALUE}
+                        onValueChange={(v) => setParticipantFilterTeam(v === ALL_TEAMS_VALUE ? '' : v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="All teams" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ALL_TEAMS_VALUE}>All teams</SelectItem>
+                          {participantTeamOptions.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-muted-foreground">
+                      {selectedParticipantIds.size} selected
+                      {participants.length > 0 ? ` • ${participants.length} shown after filters` : ''}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {(() => {
+                        const visibleIds = participants.map((p) => Number(p.id));
+                        const allShownSelected =
+                          visibleIds.length > 0 && visibleIds.every((pid) => selectedParticipantIds.has(pid));
+                        return (
+                          <>
+                            <Button
+                              type="button"
+                              variant={allShownSelected ? 'secondary' : 'default'}
+                              size="sm"
+                              disabled={!canEdit || participants.length === 0}
+                              onClick={() => {
+                                setSelectedParticipantIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (allShownSelected) {
+                                    visibleIds.forEach((pid) => next.delete(pid));
+                                  } else {
+                                    visibleIds.forEach((pid) => next.add(pid));
+                                  }
+                                  return next;
+                                });
+                              }}
+                            >
+                              {allShownSelected ? 'Unselect all shown' : 'Select all shown'}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={!canEdit || selectedParticipantIds.size === 0}
+                              onClick={() => setSelectedParticipantIds(new Set())}
+                            >
+                              Clear selection
+                            </Button>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="border rounded-lg max-h-[480px] overflow-y-auto">
+                    {loadingParticipants ? (
+                      <div className="flex items-center justify-center py-10">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      </div>
+                    ) : participants.length === 0 ? (
+                      <div className="text-center py-10 text-muted-foreground">
+                        No participants match the current filters.
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10"></TableHead>
+                            <TableHead>Keypad ID</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Class</TableHead>
+                            <TableHead>Section</TableHead>
+                            <TableHead>Team</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {participants.map((p) => {
+                            const pid = Number(p.id);
+                            const checked = selectedParticipantIds.has(pid);
+                            return (
+                              <TableRow key={p.id}>
+                                <TableCell>
+                                  <Checkbox
+                                    checked={checked}
+                                    disabled={!canEdit}
+                                    onCheckedChange={(state) => {
+                                      const isOn = state === true;
+                                      setSelectedParticipantIds((prev) => {
+                                        const next = new Set(prev);
+                                        if (isOn) {
+                                          next.add(pid);
+                                        } else {
+                                          next.delete(pid);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-medium tabular-nums">
+                                  {p.clicker_id || '—'}
+                                </TableCell>
+                                <TableCell>{p.name || '—'}</TableCell>
+                                <TableCell>{p.extra?.class || '—'}</TableCell>
+                                <TableCell>{p.extra?.section || '—'}</TableCell>
+                                <TableCell>{p.extra?.team || '—'}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+
+                  <div className="flex gap-4 mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setCurrentStep('questions')}
+                    >
+                      Back
+                    </Button>
+                    <Button type="button" onClick={() => setCurrentStep('review')}>
                       Next: Review
                     </Button>
                   </div>
@@ -1013,7 +1320,7 @@ export function ExamForm() {
             </div>
           )}
 
-          {/* Step 3: Review */}
+          {/* Step 4: Review */}
           {currentStep === 'review' && (
             <div className="space-y-6">
               <Card>
@@ -1132,11 +1439,24 @@ export function ExamForm() {
                       </div>
                     </div>
 
+                    {/* Participants Summary */}
+                    <div>
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        Participants ({selectedParticipantIds.size})
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedParticipantIds.size === 0
+                          ? 'No participants assigned yet. Go back to the Participants step to add students.'
+                          : `${selectedParticipantIds.size} student(s) will be assigned to this exam.`}
+                      </p>
+                    </div>
+
                     <div className="flex gap-4">
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => setCurrentStep('questions')}
+                        onClick={() => setCurrentStep('participants')}
                       >
                         Back
                       </Button>

@@ -271,6 +271,7 @@ export function ExamList() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="whitespace-nowrap">ID</TableHead>
                   <TableHead>Title</TableHead>
                   {showFilters && (
                     <>
@@ -291,6 +292,9 @@ export function ExamList() {
               <TableBody>
                 {safeExams.map((exam) => (
                   <TableRow key={exam.id}>
+                    <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
+                      #{exam.id}
+                    </TableCell>
                     <TableCell className="font-medium">{exam.title}</TableCell>
                     {showFilters && (
                       <>

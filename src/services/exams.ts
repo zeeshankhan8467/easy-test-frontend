@@ -32,6 +32,8 @@ export interface Exam {
   last_attempt_at?: string | null;
   question_count?: number;
   participant_count?: number;
+  /** Participant IDs explicitly assigned to this exam (via ExamParticipant). Returned by the API. */
+  participant_ids?: number[];
   total_marks?: number;
   questions?: ExamQuestion[];
   can_edit?: boolean;
@@ -68,6 +70,11 @@ export interface ExamCreate {
   show_response_after_completion: boolean;
   question_change_automatic: boolean;
   questions?: ExamQuestionInput[]; // Optional for draft
+  /**
+   * Participant IDs to assign to the exam. On update, sending this list (even empty) replaces
+   * the current assignment; omit the field to leave assignments untouched.
+   */
+  participant_ids?: number[];
   status?: 'draft' | 'frozen' | 'completed';
   owner_user_id?: number | null;
 }
