@@ -203,7 +203,9 @@ export const participantService = {
     return response.data;
   },
 
-  import: async (data: ParticipantImport): Promise<{ imported: number; errors: string[] }> => {
+  import: async (
+    data: ParticipantImport,
+  ): Promise<{ imported: number; errors: string[]; skipped_duplicates?: number }> => {
     const formData = new FormData();
     formData.append('file', data.file);
     if (data.exam_id) {
@@ -218,7 +220,7 @@ export const participantService = {
     if (data.default_team != null && String(data.default_team).trim() !== '') {
       formData.append('default_team', String(data.default_team).trim());
     }
-    const response = await api.post<{ imported: number; errors: string[] }>(
+    const response = await api.post<{ imported: number; errors: string[]; skipped_duplicates?: number }>(
       '/participants/import/',
       formData,
       {

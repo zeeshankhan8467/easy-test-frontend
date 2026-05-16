@@ -245,14 +245,20 @@ export function Participants() {
       const result = await participantService.import({
         file: selectedFile,
       });
+      const skipped = result.skipped_duplicates ?? 0;
       toast({
         title: 'Success',
-        description: `Imported ${result.imported} participants`,
+        description:
+          skipped > 0
+            ? `Imported ${result.imported} participants. ${skipped} row(s) skipped because their keypad ID already appeared in another row with the same class & section.`
+            : `Imported ${result.imported} participants`,
       });
       if (result.errors.length > 0) {
+        const preview = result.errors.slice(0, 5).join(' ');
+        const more = result.errors.length > 5 ? ` (+${result.errors.length - 5} more)` : '';
         toast({
-          title: 'Warning',
-          description: `${result.errors.length} errors occurred`,
+          title: skipped > 0 ? 'Some rows were skipped' : 'Warning',
+          description: `${result.errors.length} issue(s): ${preview}${more}`,
           variant: 'destructive',
         });
       }
