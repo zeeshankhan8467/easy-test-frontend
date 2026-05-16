@@ -73,6 +73,12 @@ export interface AttendanceParticipant {
   clicker_id?: string;
   parent_email_id?: string;
   parent_whatsapp?: string;
+  /** From `Participant.extra.class` — surfaced for client-side roster filters. */
+  class_name?: string;
+  /** From `Participant.extra.section`. */
+  section?: string;
+  /** From `Participant.extra.team`. */
+  team?: string;
 }
 
 /** Daily attendance roster row (exam-independent). */

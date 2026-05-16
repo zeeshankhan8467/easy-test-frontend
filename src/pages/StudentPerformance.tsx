@@ -436,16 +436,14 @@ export function StudentPerformance() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartData}
-                  margin={{ top: 16, right: 16, left: 0, bottom: 48 }}
+                  margin={{ top: 16, right: 16, left: 0, bottom: 16 }}
                   barCategoryGap="25%"
                 >
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     dataKey="dateLabel"
                     interval={0}
-                    angle={-30}
-                    textAnchor="end"
-                    height={60}
+                    height={36}
                     tick={{ fontSize: 12 }}
                   />
                   <YAxis

@@ -53,6 +53,10 @@ function formatDaySidebar(iso: string): string {
 type StatusFilter = 'all' | 'present' | 'absent' | 'unmarked';
 type EmailScope = 'present' | 'absent' | 'all' | 'unmarked';
 
+const ALL_CLASSES_VALUE = '__all_classes__';
+const ALL_SECTIONS_VALUE = '__all_sections__';
+const ALL_TEAMS_VALUE = '__all_teams__';
+
 function statusLabel(p: DailyAttendanceParticipant): string {
   if (!p.marked) return 'Not recorded';
   return p.present ? 'Present' : 'Absent';
@@ -64,7 +68,12 @@ export function Attendance() {
   const [selectedDate, setSelectedDate] = useState<string>(() => localISODate());
   const [attendance, setAttendance] = useState<DailyAttendanceDay | null>(null);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // Default to "present" so the page opens with only present participants visible,
+  // matching the school's request to surface attendance for present students first.
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('present');
+  const [classFilter, setClassFilter] = useState<string>('');
+  const [sectionFilter, setSectionFilter] = useState<string>('');
+  const [teamFilter, setTeamFilter] = useState<string>('');
   const { toast } = useToast();
 
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
@@ -126,29 +135,91 @@ export function Attendance() {
     };
   }, [selectedDate, toast]);
 
-  const participantsView = useMemo(() => attendance?.participants ?? [], [attendance]);
+  // The roster after class/section/team filters are applied. The status filter
+  // and the email/WhatsApp dialogs all derive from this so they share the same
+  // class/section/team scope.
+  const participantsView = useMemo(() => {
+    const ps = attendance?.participants ?? [];
+    return ps.filter((p) => {
+      if (classFilter && (p.class_name || '') !== classFilter) return false;
+      if (sectionFilter && (p.section || '') !== sectionFilter) return false;
+      if (teamFilter && (p.team || '') !== teamFilter) return false;
+      return true;
+    });
+  }, [attendance, classFilter, sectionFilter, teamFilter]);
+
+  const classOptions = useMemo(() => {
+    const set = new Set<string>();
+    (attendance?.participants ?? []).forEach((p) => {
+      const v = (p.class_name || '').trim();
+      if (v) set.add(v);
+    });
+    return Array.from(set).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }),
+    );
+  }, [attendance]);
+
+  const sectionOptions = useMemo(() => {
+    const set = new Set<string>();
+    (attendance?.participants ?? []).forEach((p) => {
+      if (classFilter && (p.class_name || '') !== classFilter) return;
+      const v = (p.section || '').trim();
+      if (v) set.add(v);
+    });
+    return Array.from(set).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }),
+    );
+  }, [attendance, classFilter]);
+
+  const teamOptions = useMemo(() => {
+    const set = new Set<string>();
+    (attendance?.participants ?? []).forEach((p) => {
+      if (classFilter && (p.class_name || '') !== classFilter) return;
+      if (sectionFilter && (p.section || '') !== sectionFilter) return;
+      const v = (p.team || '').trim();
+      if (v) set.add(v);
+    });
+    return Array.from(set).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }),
+    );
+  }, [attendance, classFilter, sectionFilter]);
+
+  // If a filter no longer matches available options (e.g. class changed),
+  // reset the dependent filters so the Select values stay valid.
+  useEffect(() => {
+    if (sectionFilter && !sectionOptions.includes(sectionFilter)) {
+      setSectionFilter('');
+    }
+  }, [sectionOptions, sectionFilter]);
+  useEffect(() => {
+    if (teamFilter && !teamOptions.includes(teamFilter)) {
+      setTeamFilter('');
+    }
+  }, [teamOptions, teamFilter]);
 
   const dayStats = useMemo(() => {
     if (!attendance) {
       return { present: 0, absent: 0, unmarked: 0, total: 0 };
     }
-    return {
-      present: attendance.present_count,
-      absent: attendance.absent_count,
-      unmarked: attendance.unmarked_count,
-      total: attendance.total_count,
-    };
-  }, [attendance]);
+    let present = 0;
+    let absent = 0;
+    let unmarked = 0;
+    for (const p of participantsView) {
+      if (!p.marked) unmarked += 1;
+      else if (p.present) present += 1;
+      else absent += 1;
+    }
+    return { present, absent, unmarked, total: participantsView.length };
+  }, [attendance, participantsView]);
 
   const filteredParticipants = useMemo(() => {
-    const ps = attendance?.participants ?? [];
-    return ps.filter((p) => {
+    return participantsView.filter((p) => {
       if (statusFilter === 'present') return p.marked && p.present;
       if (statusFilter === 'absent') return p.marked && !p.present;
       if (statusFilter === 'unmarked') return !p.marked;
       return true;
     });
-  }, [attendance, statusFilter]);
+  }, [participantsView, statusFilter]);
 
   const emailCandidates = useMemo(() => {
     const ps = participantsView;
@@ -434,6 +505,75 @@ export function Attendance() {
                   </Select>
                 </div>
 
+                <div className="space-y-2">
+                  <Label>Class</Label>
+                  <Select
+                    value={classFilter || ALL_CLASSES_VALUE}
+                    onValueChange={(v) => {
+                      const next = v === ALL_CLASSES_VALUE ? '' : v;
+                      setClassFilter(next);
+                      setSectionFilter('');
+                      setTeamFilter('');
+                    }}
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="All classes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_CLASSES_VALUE}>All classes</SelectItem>
+                      {classOptions.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Section</Label>
+                  <Select
+                    value={sectionFilter || ALL_SECTIONS_VALUE}
+                    onValueChange={(v) => {
+                      const next = v === ALL_SECTIONS_VALUE ? '' : v;
+                      setSectionFilter(next);
+                      setTeamFilter('');
+                    }}
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="All sections" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_SECTIONS_VALUE}>All sections</SelectItem>
+                      {sectionOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Team</Label>
+                  <Select
+                    value={teamFilter || ALL_TEAMS_VALUE}
+                    onValueChange={(v) => setTeamFilter(v === ALL_TEAMS_VALUE ? '' : v)}
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="All teams" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_TEAMS_VALUE}>All teams</SelectItem>
+                      {teamOptions.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <Button
                   type="button"
                   variant="outline"
@@ -490,6 +630,9 @@ export function Attendance() {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Keypad ID</TableHead>
+                      <TableHead>Class</TableHead>
+                      <TableHead>Section</TableHead>
+                      <TableHead>Team</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead className="min-w-[160px]">Attendance</TableHead>
                     </TableRow>
@@ -497,7 +640,7 @@ export function Attendance() {
                   <TableBody>
                     {filteredParticipants.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           No rows for this filter.
                         </TableCell>
                       </TableRow>
@@ -506,6 +649,9 @@ export function Attendance() {
                           <TableRow key={p.id}>
                             <TableCell className="font-medium">{p.name}</TableCell>
                             <TableCell className="text-muted-foreground">{p.clicker_id ?? '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">{p.class_name || '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">{p.section || '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">{p.team || '—'}</TableCell>
                             <TableCell className="text-muted-foreground">{p.email || '—'}</TableCell>
                             <TableCell>
                               <span
