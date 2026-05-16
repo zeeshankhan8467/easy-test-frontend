@@ -317,9 +317,28 @@ export const reportService = {
     return response.data;
   },
 
-  exportDailyAttendanceReport: async (date: string, format: 'excel' | 'pdf'): Promise<Blob> => {
+  exportDailyAttendanceReport: async (
+    date: string,
+    format: 'excel' | 'pdf',
+    /**
+     * Optional roster filters that mirror the Attendance page. The export
+     * server applies the same class/section/team/status logic so what's
+     * downloaded matches what's shown on screen.
+     */
+    filters?: {
+      class?: string;
+      section?: string;
+      team?: string;
+      status?: 'present' | 'absent' | 'unmarked' | 'all';
+    },
+  ): Promise<Blob> => {
+    const params: Record<string, string> = { date, file_format: format };
+    if (filters?.class && filters.class.trim()) params['class'] = filters.class.trim();
+    if (filters?.section && filters.section.trim()) params['section'] = filters.section.trim();
+    if (filters?.team && filters.team.trim()) params['team'] = filters.team.trim();
+    if (filters?.status) params['status'] = filters.status;
     const response = await api.get('/attendance/day/export/', {
-      params: { date, file_format: format },
+      params,
       responseType: 'blob',
     });
     return response.data as Blob;

@@ -340,11 +340,23 @@ export function Attendance() {
   const handleDownload = async (format: 'excel' | 'pdf') => {
     if (!selectedDate) return;
     try {
-      const blob = await reportService.exportDailyAttendanceReport(selectedDate, format);
+      const blob = await reportService.exportDailyAttendanceReport(selectedDate, format, {
+        class: classFilter || undefined,
+        section: sectionFilter || undefined,
+        team: teamFilter || undefined,
+        status: statusFilter,
+      });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       const ext = format === 'excel' ? 'xlsx' : 'pdf';
-      a.download = `attendance-${selectedDate}.${ext}`;
+      const scopeBits = [
+        classFilter && `class-${classFilter}`,
+        sectionFilter && `sec-${sectionFilter}`,
+        teamFilter && `team-${teamFilter}`,
+        statusFilter !== 'all' && statusFilter,
+      ].filter(Boolean) as string[];
+      const scopeSuffix = scopeBits.length ? `-${scopeBits.join('-')}` : '';
+      a.download = `attendance-${selectedDate}${scopeSuffix}.${ext}`;
       a.href = url;
       document.body.appendChild(a);
       a.click();
