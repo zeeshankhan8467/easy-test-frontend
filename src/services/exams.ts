@@ -11,6 +11,8 @@ export interface ExamQuestion {
   is_optional: boolean;
   /** When exam is revisable: allow changing answer after first submit for this slot */
   allow_revise?: boolean;
+  /** If true, show leaderboard after this question during live exam */
+  show_leaderboard?: boolean;
 }
 
 export interface Exam {
@@ -59,6 +61,7 @@ export interface ExamQuestionInput {
   negative_marks: number;
   is_optional?: boolean;
   allow_revise?: boolean;
+  show_leaderboard?: boolean;
 }
 
 export interface ExamCreate {

@@ -67,6 +67,7 @@ export function ExamForm() {
     positive_marks: number;
     negative_marks: number;
     allow_revise: boolean;
+    show_leaderboard: boolean;
   }>>([]);
 
   // Bulk mark controls (apply to all selected questions at once)
@@ -211,6 +212,7 @@ export function ExamForm() {
           positive_marks: typeof eq.positive_marks === 'number' ? eq.positive_marks : parseFloat(eq.positive_marks) || 1.0,
           negative_marks: typeof eq.negative_marks === 'number' ? eq.negative_marks : parseFloat(eq.negative_marks) || 0.0,
           allow_revise: typeof eq.allow_revise === 'boolean' ? eq.allow_revise : true,
+          show_leaderboard: typeof eq.show_leaderboard === 'boolean' ? eq.show_leaderboard : false,
         }));
         setSelectedQuestions(questions);
         setBulkPositiveMarks(questions[0]?.positive_marks ?? 1.0);
@@ -267,6 +269,7 @@ export function ExamForm() {
       positive_marks: typeof question.marks === 'number' ? question.marks : (question.marks != null ? parseFloat(String(question.marks)) : 0) || 1.0,
       negative_marks: 0.0,
       allow_revise: true,
+      show_leaderboard: false,
     };
 
     setSelectedQuestions([...selectedQuestions, newQuestion]);
@@ -297,6 +300,7 @@ export function ExamForm() {
             : 1.0,
       negative_marks: 0.0,
       allow_revise: true,
+      show_leaderboard: false,
     }));
 
     setSelectedQuestions([...selectedQuestions, ...newQuestions]);
@@ -403,6 +407,7 @@ export function ExamForm() {
         negative_marks: sq.negative_marks,
         is_optional: false,
         allow_revise: sq.allow_revise,
+        show_leaderboard: sq.show_leaderboard,
       }));
 
       const participantIdsArray = Array.from(selectedParticipantIds);
@@ -471,6 +476,7 @@ export function ExamForm() {
         negative_marks: sq.negative_marks,
         is_optional: false,
         allow_revise: sq.allow_revise,
+        show_leaderboard: sq.show_leaderboard,
       }));
 
       await examService.update(id, {
@@ -989,6 +995,9 @@ export function ExamForm() {
                             <TableHead className="w-28 text-center">
                               <span title="Requires exam revisable enabled">Revise</span>
                             </TableHead>
+                            <TableHead className="w-28 text-center">
+                              <span title="Show leaderboard after this question in live exam">Leaderboard</span>
+                            </TableHead>
                             <TableHead className="w-32">Positive Marks</TableHead>
                             <TableHead className="w-32">Negative Marks</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -1020,6 +1029,21 @@ export function ExamForm() {
                                         selectedQuestions.map((row) =>
                                           row.question.id === sq.question.id
                                             ? { ...row, allow_revise: checked === true }
+                                            : row
+                                        )
+                                      )
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell className="text-center align-middle">
+                                  <Checkbox
+                                    checked={sq.show_leaderboard}
+                                    title="Show leaderboard after this question in live exam"
+                                    onCheckedChange={(checked) =>
+                                      setSelectedQuestions(
+                                        selectedQuestions.map((row) =>
+                                          row.question.id === sq.question.id
+                                            ? { ...row, show_leaderboard: checked === true }
                                             : row
                                         )
                                       )
@@ -1410,6 +1434,11 @@ export function ExamForm() {
                                       }`}
                                     >
                                       {sq.allow_revise ? 'Answer revisable' : 'No revise (locked after first submit)'}
+                                    </span>
+                                  )}
+                                  {sq.show_leaderboard && (
+                                    <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-100">
+                                      Show leaderboard
                                     </span>
                                   )}
                                 </div>
